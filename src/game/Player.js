@@ -39,6 +39,8 @@ export class Player {
     
     this.ultimateActive = false;
     this.ultimateProgress = 0;
+    
+    this.targetX = null;
   }
   
   update(deltaTime, currentTime) {
@@ -48,6 +50,15 @@ export class Player {
       }
       if (this.moveRight) {
         this.x += this.speed;
+      }
+      // 触控：直接设置目标位置（平滑跟随手指）
+      if (this.targetX !== null) {
+        const dx = this.targetX - (this.x + this.width / 2);
+        if (Math.abs(dx) > 1) {
+          this.x += dx * 0.3;
+        } else {
+          this.x = this.targetX - this.width / 2;
+        }
       }
     } else {
       this.updateDodge(currentTime);
@@ -68,6 +79,14 @@ export class Player {
     }
     
     this.engineFlicker += deltaTime * 0.02;
+  }
+  
+  setTargetX(x) {
+    this.targetX = x;
+  }
+  
+  clearTargetX() {
+    this.targetX = null;
   }
   
   tryLightFire(currentTime) {
@@ -288,5 +307,6 @@ export class Player {
     this.isDodging = false;
     this.isInvincible = false;
     this.ultimateActive = false;
+    this.targetX = null;
   }
 }

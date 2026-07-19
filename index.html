@@ -2,7 +2,10 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>机甲大战怪兽</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,8 +14,12 @@
 </head>
 <body>
   <div id="app">
+    <div id="rotateTip" class="rotate-tip">
+      <div class="rotate-icon">📱</div>
+      <p>请将设备旋转至竖屏</p>
+    </div>
     <div class="game-container">
-      <canvas id="gameCanvas" width="800" height="600"></canvas>
+      <canvas id="gameCanvas" width="450" height="800"></canvas>
       
       <!-- 开始界面 -->
       <div id="startScreen" class="screen active">
@@ -25,7 +32,7 @@
           <button class="btn btn-secondary" id="levelSelectBtn">选择关卡</button>
         </div>
         <div class="controls-hint">
-          <p>← → 移动 | ↑↓ 躲闪 | A 重攻击 | B 轻攻击 | C 大招</p>
+          <p id="controlsHint">← → 移动 | ↑↓ 躲闪 | A 重攻击 | B 轻攻击 | C 大招</p>
         </div>
       </div>
       

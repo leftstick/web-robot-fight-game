@@ -3,7 +3,27 @@ export class InputManager {
     this.keys = {};
     this.justPressed = {};
     
+    // 触控状态
+    this.isTouchDevice = this.detectTouchDevice();
+    this.touchActive = false;
+    this.touchX = 0;
+    this.touchY = 0;
+    this.canvas = null;
+    
     this.init();
+  }
+  
+  detectTouchDevice() {
+    return (('ontouchstart' in window) ||
+            (navigator.maxTouchPoints > 0) ||
+            (navigator.msMaxTouchPoints > 0));
+  }
+  
+  setCanvas(canvas) {
+    this.canvas = canvas;
+    if (this.isTouchDevice) {
+      this.initTouch();
+    }
   }
   
   init() {
@@ -22,6 +42,51 @@ export class InputManager {
     window.addEventListener('keyup', (e) => {
       this.keys[e.code] = false;
     });
+  }
+  
+  initTouch() {
+    if (!this.canvas) return;
+    
+    const canvas = this.canvas;
+    
+    const getTouchPos = (touch) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      return {
+        x: (touch.clientX - rect.left) * scaleX,
+        y: (touch.clientY - rect.top) * scaleY
+      };
+    };
+    
+    const handleStart = (e) => {
+      e.preventDefault();
+      if (e.touches.length > 0) {
+        const pos = getTouchPos(e.touches[0]);
+        this.touchActive = true;
+        this.touchX = pos.x;
+        this.touchY = pos.y;
+      }
+    };
+    
+    const handleMove = (e) => {
+      e.preventDefault();
+      if (this.touchActive && e.touches.length > 0) {
+        const pos = getTouchPos(e.touches[0]);
+        this.touchX = pos.x;
+        this.touchY = pos.y;
+      }
+    };
+    
+    const handleEnd = (e) => {
+      e.preventDefault();
+      this.touchActive = false;
+    };
+    
+    canvas.addEventListener('touchstart', handleStart, { passive: false });
+    canvas.addEventListener('touchmove', handleMove, { passive: false });
+    canvas.addEventListener('touchend', handleEnd, { passive: false });
+    canvas.addEventListener('touchcancel', handleEnd, { passive: false });
   }
   
   isKeyDown(keyCode) {
@@ -54,6 +119,19 @@ export class InputManager {
   
   isPauseJustPressed() {
     return this.isKeyJustPressed('Escape') || this.isKeyJustPressed('KeyP');
+  }
+  
+  // 触控相关方法
+  isTouchActive() {
+    return this.touchActive;
+  }
+  
+  getTouchX() {
+    return this.touchX;
+  }
+  
+  getTouchY() {
+    return this.touchY;
   }
   
   clearJustPressed() {

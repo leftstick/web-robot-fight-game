@@ -61,6 +61,7 @@ export class Game {
   
   init() {
     this.player = new Player(this.width, this.height);
+    this.input.setCanvas(this.canvas);
     this.gameLoop(0);
   }
   
@@ -151,11 +152,23 @@ export class Game {
       return;
     }
     
-    this.player.moveLeft = this.input.isLeft();
-    this.player.moveRight = this.input.isRight();
-    
-    this.handleDodgeInput(currentTime);
-    this.handleFireInput(currentTime);
+    if (this.input.isTouchDevice && this.input.isTouchActive()) {
+      // 移动端：触控控制
+      this.player.setTargetX(this.input.getTouchX());
+      
+      // 按住屏幕自动发射轻攻击
+      if (this.player.tryLightFire(currentTime)) {
+        this.fireLightBullet();
+      }
+    } else {
+      // 桌面端：键盘控制
+      this.player.clearTargetX();
+      this.player.moveLeft = this.input.isLeft();
+      this.player.moveRight = this.input.isRight();
+      
+      this.handleDodgeInput(currentTime);
+      this.handleFireInput(currentTime);
+    }
     
     this.player.update(this.deltaTime, currentTime);
     

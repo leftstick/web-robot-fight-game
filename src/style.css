@@ -17,10 +17,26 @@
   --glow-danger: 0 0 20px rgba(255, 71, 87, 0.5);
 }
 
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
 body {
   font-family: 'Orbitron', 'Segoe UI', sans-serif;
   background: linear-gradient(135deg, #0a1628 0%, #1a2a4a 50%, #0a1628 100%);
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -55,26 +71,77 @@ body::before {
 #app {
   width: 100%;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   justify-content: center;
   align-items: center;
+  position: relative;
 }
 
 .game-container {
   position: relative;
-  width: 800px;
-  height: 600px;
-  border: 3px solid var(--primary-color);
-  border-radius: 8px;
+  width: 100%;
+  height: 100%;
+  max-width: 450px;
+  max-height: 800px;
+  aspect-ratio: 450 / 800;
+  border: 2px solid var(--primary-color);
+  border-radius: 4px;
   box-shadow: 
-    0 0 30px rgba(0, 212, 255, 0.3),
-    inset 0 0 30px rgba(0, 212, 255, 0.1);
+    0 0 20px rgba(0, 212, 255, 0.3),
+    inset 0 0 20px rgba(0, 212, 255, 0.1);
   overflow: hidden;
 }
 
 #gameCanvas {
   display: block;
+  width: 100%;
+  height: 100%;
   background: #000;
+  touch-action: none;
+}
+
+/* 横屏提示 */
+.rotate-tip {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--secondary-color);
+  z-index: 9999;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 20px;
+}
+
+.rotate-tip .rotate-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+  animation: rotateAnim 1.5s ease-in-out infinite;
+}
+
+@keyframes rotateAnim {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-90deg); }
+}
+
+.rotate-tip p {
+  color: var(--text-color);
+  font-size: 18px;
+  letter-spacing: 2px;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .rotate-tip {
+    display: flex;
+  }
+  .game-container {
+    display: none;
+  }
 }
 
 .screen {
@@ -98,11 +165,11 @@ body::before {
 
 .title-wrapper {
   text-align: center;
-  margin-bottom: 60px;
+  margin-bottom: 40px;
 }
 
 .game-title {
-  font-size: 56px;
+  font-size: 40px;
   font-weight: 900;
   background: linear-gradient(135deg, var(--primary-color), #0099cc, var(--primary-color));
   background-size: 200% 200%;
@@ -112,7 +179,7 @@ body::before {
   text-shadow: none;
   filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.8));
   animation: titleGlow 3s ease-in-out infinite;
-  letter-spacing: 4px;
+  letter-spacing: 3px;
 }
 
 @keyframes titleGlow {
@@ -146,16 +213,16 @@ body::before {
 
 .btn {
   font-family: 'Orbitron', sans-serif;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
-  padding: 14px 48px;
+  padding: 12px 36px;
   border: 2px solid transparent;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.3s ease;
   text-transform: uppercase;
   letter-spacing: 2px;
-  min-width: 200px;
+  min-width: 180px;
   position: relative;
   overflow: hidden;
 }
@@ -249,15 +316,16 @@ body::before {
 /* 关卡选择 */
 .level-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  max-width: 600px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  max-width: 360px;
   margin-bottom: 30px;
+  padding: 0 16px;
 }
 
 .level-card {
-  width: 120px;
-  height: 120px;
+  width: 100%;
+  height: 100px;
   border: 2px solid var(--primary-color);
   border-radius: 8px;
   background: rgba(0, 212, 255, 0.05);
@@ -307,18 +375,19 @@ body::before {
   top: 0;
   left: 0;
   right: 0;
-  padding: 12px 20px;
+  padding: 10px 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   background: linear-gradient(180deg, rgba(10, 22, 40, 0.9) 0%, transparent 100%);
   z-index: 5;
   pointer-events: none;
+  padding-top: max(10px, env(safe-area-inset-top));
 }
 
 .hud-left, .hud-right {
   display: flex;
-  gap: 24px;
+  gap: 16px;
   align-items: center;
 }
 
@@ -344,12 +413,14 @@ body::before {
 
 .lives-container {
   display: flex;
-  gap: 6px;
+  gap: 3px;
+  flex-wrap: wrap;
+  max-width: 100px;
 }
 
 .life-icon {
-  width: 20px;
-  height: 20px;
+  width: 12px;
+  height: 12px;
   background: var(--danger-color);
   clip-path: polygon(50% 0%, 100% 35%, 80% 100%, 20% 100%, 0% 35%);
   box-shadow: var(--glow-danger);
@@ -387,9 +458,9 @@ body::before {
 
 /* 结算界面 */
 .result-title {
-  font-size: 64px;
+  font-size: 48px;
   font-weight: 900;
-  margin-bottom: 40px;
+  margin-bottom: 30px;
   letter-spacing: 4px;
 }
 
@@ -411,26 +482,26 @@ body::before {
 
 .result-stats {
   display: flex;
-  gap: 40px;
-  margin-bottom: 50px;
+  gap: 24px;
+  margin-bottom: 40px;
 }
 
 .stat-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 
 .stat-value {
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 900;
   color: var(--primary-color);
   text-shadow: var(--glow-primary);

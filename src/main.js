@@ -32,9 +32,29 @@ class GameApp {
   init() {
     this.setupGameCallbacks();
     this.setupEventListeners();
+    this.setupDeviceSpecific();
     this.renderLevelGrid();
     this.showScreen('start');
     this.game.init();
+  }
+  
+  setupDeviceSpecific() {
+    const isTouchDevice = (('ontouchstart' in window) ||
+                           (navigator.maxTouchPoints > 0));
+    
+    const hint = document.getElementById('controlsHint');
+    const menuHint = document.querySelector('.menu-hint');
+    
+    if (isTouchDevice) {
+      // 移动端：更新操作提示
+      if (hint) {
+        hint.textContent = '按住屏幕发射 | 左右滑动移动';
+      }
+      // 失败界面不显示键盘提示
+      if (menuHint) {
+        menuHint.style.display = 'none';
+      }
+    }
   }
   
   setupGameCallbacks() {
