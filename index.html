@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>机甲大战怪兽</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+  <div id="app">
+    <div class="game-container">
+      <canvas id="gameCanvas" width="800" height="600"></canvas>
+      
+      <!-- 开始界面 -->
+      <div id="startScreen" class="screen active">
+        <div class="title-wrapper">
+          <h1 class="game-title">机甲大战怪兽</h1>
+          <p class="game-subtitle">MECHA VS MONSTERS</p>
+        </div>
+        <div class="menu-buttons">
+          <button class="btn btn-primary" id="startBtn">开始游戏</button>
+          <button class="btn btn-secondary" id="levelSelectBtn">选择关卡</button>
+        </div>
+        <div class="controls-hint">
+          <p>← → 移动 | ↑↓ 躲闪 | A 重攻击 | B 轻攻击 | C 大招</p>
+        </div>
+      </div>
+      
+      <!-- 关卡选择界面 -->
+      <div id="levelSelectScreen" class="screen">
+        <h2 class="screen-title">选择关卡</h2>
+        <div class="level-grid" id="levelGrid"></div>
+        <button class="btn btn-back" id="backToStartBtn">返回</button>
+      </div>
+      
+      <!-- 游戏HUD -->
+      <div id="gameHUD" class="hud">
+        <div class="hud-left">
+          <div class="hud-item">
+            <span class="hud-label">关卡</span>
+            <span class="hud-value" id="levelDisplay">1</span>
+          </div>
+          <div class="hud-item">
+            <span class="hud-label">分数</span>
+            <span class="hud-value" id="scoreDisplay">0</span>
+          </div>
+        </div>
+        <div class="hud-right">
+          <div class="hud-item lives">
+            <span class="hud-label">生命</span>
+            <div class="lives-container" id="livesDisplay"></div>
+          </div>
+          <div class="hud-item">
+            <span class="hud-label">怪兽</span>
+            <span class="hud-value" id="enemyCount">10</span>
+          </div>
+          <button class="pause-btn" id="pauseBtn">⏸</button>
+        </div>
+      </div>
+      
+      <!-- 暂停界面 -->
+      <div id="pauseScreen" class="screen pause-screen">
+        <h2 class="screen-title">游戏暂停</h2>
+        <div class="menu-buttons">
+          <button class="btn btn-primary" id="resumeBtn">继续游戏</button>
+          <button class="btn btn-secondary" id="restartBtn">重新开始</button>
+          <button class="btn btn-back" id="quitBtn">退出游戏</button>
+        </div>
+      </div>
+      
+      <!-- 结算界面 -->
+      <div id="gameOverScreen" class="screen">
+        <h2 class="result-title" id="resultTitle">胜利!</h2>
+        <div class="result-stats">
+          <div class="stat-item">
+            <span class="stat-label">关卡</span>
+            <span class="stat-value" id="resultLevel">1</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">得分</span>
+            <span class="stat-value" id="resultScore">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">消灭怪兽</span>
+            <span class="stat-value" id="resultKills">0</span>
+          </div>
+        </div>
+        <div class="menu-buttons gameover-buttons">
+          <button class="btn btn-primary selected" id="nextLevelBtn">下一关</button>
+          <button class="btn btn-secondary" id="retryBtn">重试</button>
+          <button class="btn btn-back" id="menuBtn">返回主菜单</button>
+        </div>
+        <div class="menu-hint">
+          <p>↑↓ 选择 | 空格/回车 确认</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
