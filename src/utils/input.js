@@ -116,7 +116,26 @@ export class InputManager {
   isFireJustPressed() {
     return this.isKeyJustPressed('Space');
   }
-  
+
+  // 下蹲 / 贴掩体藏好：按下方向下键或 S
+  isCrouch() {
+    return this.isKeyDown('ArrowDown') || this.isKeyDown('KeyS');
+  }
+
+  // 跳跃：一次性触发（上键 / W / 空格之外的独立跳键）
+  consumeJump() {
+    return this.isKeyJustPressed('ArrowUp') ||
+           this.isKeyJustPressed('KeyW') ||
+           this.isKeyJustPressed('KeyK');
+  }
+
+  // 手雷：一次性触发
+  consumeGrenade() {
+    return this.isKeyJustPressed('KeyG') ||
+           this.isKeyJustPressed('KeyE') ||
+           this.isKeyJustPressed('KeyJ');
+  }
+
   isPauseJustPressed() {
     return this.isKeyJustPressed('Escape') || this.isKeyJustPressed('KeyP');
   }

@@ -1,5 +1,5 @@
 import { Game, GameState } from './game/Game.js';
-import { LevelConfigs, GameConfig } from './config/gameConfig.js';
+import { LEVEL_META, GameConfig } from './config/gameConfig.js';
 
 class GameApp {
   constructor() {
@@ -151,7 +151,7 @@ class GameApp {
   
   nextLevel() {
     const next = this.game.currentLevel + 1;
-    if (next <= LevelConfigs.length) {
+    if (next <= LEVEL_META.length) {
       this.hideAllScreens();
       this.hud.container.style.display = 'flex';
       this.game.startLevel(next);
@@ -200,7 +200,7 @@ class GameApp {
     if (victory) {
       titleEl.textContent = '胜利!';
       titleEl.className = 'result-title victory';
-      const hasNext = this.game.currentLevel < LevelConfigs.length;
+      const hasNext = this.game.currentLevel < LEVEL_META.length;
       nextBtn.style.display = hasNext ? 'block' : 'none';
       
       this.gameoverButtons = hasNext ? [nextBtn, retryBtn, menuBtn] : [retryBtn, menuBtn];
@@ -230,7 +230,7 @@ class GameApp {
   
   updateLives(lives) {
     this.hud.lives.innerHTML = '';
-    for (let i = 0; i < GameConfig.PLAYER_LIVES; i++) {
+    for (let i = 0; i < GameConfig.PLAYER.lives; i++) {
       const life = document.createElement('div');
       life.className = 'life-icon' + (i >= lives ? ' empty' : '');
       this.hud.lives.appendChild(life);
@@ -245,8 +245,8 @@ class GameApp {
     const grid = document.getElementById('levelGrid');
     grid.innerHTML = '';
     
-    for (let i = 0; i < LevelConfigs.length; i++) {
-      const config = LevelConfigs[i];
+    for (let i = 0; i < LEVEL_META.length; i++) {
+      const config = LEVEL_META[i];
       const levelNum = i + 1;
       const unlocked = this.unlockedLevels.includes(levelNum);
       
@@ -280,7 +280,7 @@ class GameApp {
   
   saveProgress(level) {
     try {
-      if (!this.unlockedLevels.includes(level + 1) && level < LevelConfigs.length) {
+      if (!this.unlockedLevels.includes(level + 1) && level < LEVEL_META.length) {
         this.unlockedLevels.push(level + 1);
       }
       localStorage.setItem('mecha_game_progress', JSON.stringify({

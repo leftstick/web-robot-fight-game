@@ -1,145 +1,90 @@
+// 横版卷轴平台射击（run-and-gun）全局配置
+// 品类锁定：横屏平台射击，不是纵向弹幕飞机打怪。
+
 export const GameConfig = {
-  CANVAS_WIDTH: 450,
-  CANVAS_HEIGHT: 800,
-  
-  PLAYER_WIDTH: 50,
-  PLAYER_HEIGHT: 45,
-  PLAYER_SPEED: 8,
-  PLAYER_LIVES: 10,
-  PLAYER_Y_OFFSET: 80,
-  
-  LIGHT_BULLET_WIDTH: 5,
-  LIGHT_BULLET_HEIGHT: 12,
-  LIGHT_BULLET_SPEED: 12,
-  LIGHT_BULLET_DAMAGE: 1,
-  LIGHT_FIRE_RATE: 150,
-  LIGHT_BULLET_COLOR: '#00d4ff',
-  
-  HEAVY_BULLET_WIDTH: 12,
-  HEAVY_BULLET_HEIGHT: 25,
-  HEAVY_BULLET_SPEED: 7,
-  HEAVY_BULLET_DAMAGE: 5,
-  HEAVY_FIRE_RATE: 600,
-  HEAVY_BULLET_COLOR: '#ffa502',
-  
-  ULTIMATE_DAMAGE: 10,
-  ULTIMATE_COOLDOWN: 10000,
-  ULTIMATE_COLOR: '#ff4757',
-  
-  DODGE_DISTANCE: 100,
-  DODGE_DURATION: 200,
-  DODGE_COOLDOWN: 1000,
-  DODGE_INVINCIBLE_DURATION: 300,
-  
-  SMALL_ENEMY_WIDTH: 36,
-  SMALL_ENEMY_HEIGHT: 36,
-  SMALL_ENEMY_HP: 1,
-  SMALL_ENEMY_SPEED: 1.5,
-  SMALL_ENEMY_SCORE: 100,
-  
-  LARGE_ENEMY_WIDTH: 60,
-  LARGE_ENEMY_HEIGHT: 60,
-  LARGE_ENEMY_HP: 2,
-  LARGE_ENEMY_SPEED: 0.8,
-  LARGE_ENEMY_SCORE: 500,
-  
-  ENEMY_SPAWN_INTERVAL: 1500,
-  ENEMY_SPAWN_X_MIN: 30,
-  ENEMY_SPAWN_X_MAX: 420,
-  ENEMY_SPAWN_Y: -50,
-  
-  TOTAL_ENEMIES_PER_LEVEL: 10,
-  
+  // 横屏 16:9 基准分辨率
+  CANVAS_WIDTH: 960,
+  CANVAS_HEIGHT: 540,
+
+  // world / camera 坐标系
+  WORLD_WIDTH: 4800,      // 关卡世界宽度（默认，可被关卡数据覆盖）
+  GROUND_Y: 470,          // 地面顶面 y（世界坐标）
+  GROUND_THICKNESS: 70,   // 地面厚度
+
+  GRAVITY: 0.7,           // 重力加速度（像素/帧，按 dt 归一化）
+  MAX_FALL_SPEED: 16,     // 最大下落速度
+
+  PLAYER: {
+    width: 32,
+    height: 48,
+    crouchHeight: 28,       // 蹲下/贴掩体时的高度
+    speed: 4.6,             // 水平移动速度
+    airControl: 0.85,       // 空中横移系数
+    jumpSpeed: -13.2,       // 起跳初速度
+    doubleJump: false,      // 预留二段跳开关
+    lives: 5,
+    invincibleTime: 1200,
+    fireInterval: 110,      // 水平射击间隔(ms)
+    bulletSpeed: 13,
+    bulletDamage: 1,
+    bulletWidth: 16,
+    bulletHeight: 4,
+    grenadeCooldown: 1400,
+  },
+
+  THUG: {                   // 人形暴徒
+    width: 32,
+    height: 48,
+    crouchHeight: 28,
+    speed: 1.5,
+    hp: 3,
+    score: 120,
+    fireInterval: 1150,
+    bulletSpeed: 6.5,
+    bulletDamage: 1,
+    engageRange: 430,       // 进入该距离后停下对射
+    coverHideTime: 900,     // 掩体后隐蔽时长
+    coverPeekTime: 700,     // 探头射击时长
+  },
+
+  BOSS: {                   // 关底帮派 BOSS
+    width: 56,
+    height: 84,
+    crouchHeight: 56,
+    speed: 0.9,
+    hp: 42,
+    score: 2000,
+    fireInterval: 850,
+    bulletSpeed: 7.5,
+    bulletDamage: 2,
+  },
+
+  GRENADE: {
+    width: 10,
+    height: 10,
+    throwVX: 8.5,
+    throwVY: -10.5,
+    gravity: 0.5,
+    fuse: 1300,
+    radius: 95,             // 爆炸范围
+    damage: 6,
+  },
+
+  ENEMY_BULLET: {
+    width: 14,
+    height: 4,
+    color: '#ff5a5a',
+  },
+
   COLORS: {
-    primary: '#00d4ff',
-    secondary: '#0a1628',
-    danger: '#ff4757',
-    success: '#2ed573',
-    warning: '#ffa502',
-    playerBody: '#00d4ff',
-    playerAccent: '#0099cc',
-    bullet: '#00d4ff',
-    bulletGlow: 'rgba(0, 212, 255, 0.5)',
-    smallEnemy: '#ff6b6b',
-    smallEnemyAccent: '#ee5a5a',
-    largeEnemy: '#a55eea',
-    largeEnemyAccent: '#8854d0',
-  }
+    playerBullet: '#ffe066',
+    neon: ['#ff2e88', '#00e5ff', '#b14aed', '#39ff88', '#ff8a3d'],
+  },
 };
 
-export const LevelConfigs = [
-  {
-    id: 1,
-    name: '太空',
-    scene: 'space',
-    largeEnemyCount: 0,
-    smallEnemyCount: 10,
-    bgColors: ['#0a0a1a', '#1a1a3a', '#0a0a2a'],
-    stars: true,
-  },
-  {
-    id: 2,
-    name: '海洋',
-    scene: 'ocean',
-    largeEnemyCount: 1,
-    smallEnemyCount: 9,
-    bgColors: ['#0a1628', '#0d3b5c', '#0a2a4a'],
-    bubbles: true,
-  },
-  {
-    id: 3,
-    name: '撒哈拉大沙漠',
-    scene: 'desert',
-    largeEnemyCount: 2,
-    smallEnemyCount: 8,
-    bgColors: ['#2d1b0e', '#8b6914', '#c4a35a'],
-    sandDunes: true,
-  },
-  {
-    id: 4,
-    name: '火星',
-    scene: 'mars',
-    largeEnemyCount: 3,
-    smallEnemyCount: 7,
-    bgColors: ['#3d1c0c', '#8b3a1a', '#c4572a'],
-    craters: true,
-  },
-  {
-    id: 5,
-    name: '月球',
-    scene: 'moon',
-    largeEnemyCount: 4,
-    smallEnemyCount: 6,
-    bgColors: ['#1a1a1a', '#3a3a3a', '#2a2a2a'],
-    stars: true,
-    craters: true,
-  },
-  {
-    id: 6,
-    name: '非洲大草原',
-    scene: 'savanna',
-    largeEnemyCount: 5,
-    smallEnemyCount: 5,
-    bgColors: ['#2d2d0e', '#8b7355', '#c4a35a'],
-    grass: true,
-  },
-  {
-    id: 7,
-    name: '热带雨林',
-    scene: 'rainforest',
-    largeEnemyCount: 6,
-    smallEnemyCount: 4,
-    bgColors: ['#0a2a1a', '#1a5c3a', '#2a8b4a'],
-    leaves: true,
-  },
-  {
-    id: 8,
-    name: '海王星',
-    scene: 'neptune',
-    largeEnemyCount: 7,
-    smallEnemyCount: 3,
-    bgColors: ['#0a1a3a', '#1a4a8b', '#3a7ac4'],
-    stars: true,
-    clouds: true,
-  },
+// 关卡元信息（用于选关界面），真正的关卡布局在 src/data/levels.json
+export const LEVEL_META = [
+  { id: 1, name: '霓虹街区', worldWidth: 4800 },
+  { id: 2, name: '雨夜码头', worldWidth: 4600 },
+  { id: 3, name: '帮派老巢', worldWidth: 5400 },
 ];

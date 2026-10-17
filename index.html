@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>机甲大战怪兽</title>
+  <title>霓虹猎杀 · 横版暴徒</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
@@ -16,23 +16,23 @@
   <div id="app">
     <div id="rotateTip" class="rotate-tip">
       <div class="rotate-icon">📱</div>
-      <p>请将设备旋转至竖屏</p>
+      <p>请将设备旋转至横屏</p>
     </div>
     <div class="game-container">
-      <canvas id="gameCanvas" width="450" height="800"></canvas>
+      <canvas id="gameCanvas" width="960" height="540"></canvas>
       
       <!-- 开始界面 -->
       <div id="startScreen" class="screen active">
         <div class="title-wrapper">
-          <h1 class="game-title">机甲大战怪兽</h1>
-          <p class="game-subtitle">MECHA VS MONSTERS</p>
+          <h1 class="game-title">霓虹猎杀</h1>
+          <p class="game-subtitle">NEON HUNTDOWN</p>
         </div>
         <div class="menu-buttons">
           <button class="btn btn-primary" id="startBtn">开始游戏</button>
           <button class="btn btn-secondary" id="levelSelectBtn">选择关卡</button>
         </div>
         <div class="controls-hint">
-          <p id="controlsHint">← → 移动 | ↑↓ 躲闪 | A 重攻击 | B 轻攻击 | C 大招</p>
+          <p id="controlsHint">← → 移动 | ↑/W/K 跳跃 | ↓ 蹲下藏掩体 | 空格 射击 | G 手雷</p>
         </div>
       </div>
       
@@ -61,7 +61,7 @@
             <div class="lives-container" id="livesDisplay"></div>
           </div>
           <div class="hud-item">
-            <span class="hud-label">怪兽</span>
+            <span class="hud-label">暴徒</span>
             <span class="hud-value" id="enemyCount">10</span>
           </div>
           <button class="pause-btn" id="pauseBtn">⏸</button>
@@ -91,7 +91,7 @@
             <span class="stat-value" id="resultScore">0</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">消灭怪兽</span>
+            <span class="stat-label">消灭暴徒</span>
             <span class="stat-value" id="resultKills">0</span>
           </div>
         </div>

@@ -1,109 +1,61 @@
-export const BulletType = {
-  LIGHT: 'light',
-  HEAVY: 'heavy'
+// 水平飞行的子弹：bullet.x += vx * dtf，vx 的符号即朝向（facing）。
+// 禁止出现 bullet.y -= speed 这种"永远向上飞"的逻辑。
+
+export const BulletOwner = {
+  PLAYER: 'player',
+  ENEMY: 'enemy',
 };
 
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export class Bullet {
-  constructor(x, y, type = BulletType.LIGHT, config) {
+  constructor(x, y, vx, vy, options) {
     this.x = x;
     this.y = y;
-    this.type = type;
-    this.width = config.width;
-    this.height = config.height;
-    this.speed = config.speed;
-    this.damage = config.damage;
-    this.color = config.color;
+    this.vx = vx;
+    this.vy = vy;
+    this.width = options.width;
+    this.height = options.height;
+    this.damage = options.damage;
+    this.color = options.color;
+    this.owner = options.owner;
     this.active = true;
-    this.trail = [];
-    this.maxTrailLength = type === BulletType.HEAVY ? 8 : 5;
   }
-  
-  update(deltaTime) {
-    this.trail.unshift({ x: this.x + this.width / 2, y: this.y + this.height });
-    if (this.trail.length > this.maxTrailLength) {
-      this.trail.pop();
-    }
-    
-    this.y -= this.speed;
-    
-    if (this.y + this.height < 0) {
-      this.active = false;
-    }
+
+  update(dtf) {
+    this.x += this.vx * dtf;
+    this.y += this.vy * dtf;
   }
-  
-  draw(ctx) {
-    ctx.save();
-    
-    for (let i = 0; i < this.trail.length; i++) {
-      const alpha = 1 - (i / this.trail.length);
-      const size = this.width * (1 - i / this.trail.length * 0.5);
-      ctx.fillStyle = this.hexToRgba(this.color, alpha * 0.4);
-      ctx.beginPath();
-      ctx.ellipse(
-        this.trail[i].x,
-        this.trail[i].y,
-        size / 2,
-        this.height * 0.3 * (1 - i / this.trail.length),
-        0, 0, Math.PI * 2
-      );
-      ctx.fill();
-    }
-    
-    const bulletGradient = ctx.createLinearGradient(
-      this.x, this.y + this.height,
-      this.x, this.y
-    );
-    bulletGradient.addColorStop(0, this.color);
-    bulletGradient.addColorStop(0.5, '#ffffff');
-    bulletGradient.addColorStop(1, this.color);
-    
-    ctx.shadowColor = this.color;
-    ctx.shadowBlur = this.type === BulletType.HEAVY ? 20 : 10;
-    ctx.fillStyle = bulletGradient;
-    
-    ctx.beginPath();
-    ctx.ellipse(
-      this.x + this.width / 2,
-      this.y + this.height / 2,
-      this.width / 2,
-      this.height / 2,
-      0, 0, Math.PI * 2
-    );
-    ctx.fill();
-    
-    if (this.type === BulletType.HEAVY) {
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-    
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.ellipse(
-      this.x + this.width / 2,
-      this.y + this.height * 0.3,
-      this.width / 4,
-      this.height / 4,
-      0, 0, Math.PI * 2
-    );
-    ctx.fill();
-    
-    ctx.restore();
-  }
-  
-  hexToRgba(hex, alpha) {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-  
+
   getBounds() {
-    return {
-      x: this.x,
-      y: this.y,
-      width: this.width,
-      height: this.height
-    };
+    return { x: this.x, y: this.y, width: this.width, height: this.height };
+  }
+
+  draw(ctx) {
+    const cx = this.x + this.width / 2;
+    const cy = this.y + this.height / 2;
+    const dir = this.vx >= 0 ? 1 : -1;
+    const len = Math.max(this.width, Math.abs(this.vx) * 1.7);
+
+    ctx.save();
+
+    // 拖尾
+    const grd = ctx.createLinearGradient(cx - (dir * len) / 2, 0, cx + (dir * len) / 2, 0);
+    grd.addColorStop(0, hexToRgba(this.color, 0));
+    grd.addColorStop(0.55, hexToRgba(this.color, 0.75));
+    grd.addColorStop(1, this.color);
+    ctx.fillStyle = grd;
+    ctx.fillRect(cx - (dir * len) / 2, cy - this.height / 2, len, this.height);
+
+    // 弹头
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cx + dir * (len * 0.2) - (dir < 0 ? len * 0.4 : 0), cy - this.height * 0.35, len * 0.4, this.height * 0.7);
+
+    ctx.restore();
   }
 }

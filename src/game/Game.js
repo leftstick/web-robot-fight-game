@@ -1,18 +1,29 @@
-import { GameConfig, LevelConfigs } from '../config/gameConfig.js';
-import { Player, DodgeDirection } from './Player.js';
-import { SmallEnemy, LargeEnemy } from './Enemy.js';
+import { GameConfig } from '../config/gameConfig.js';
+import { Player } from './Player.js';
+import { Thug, Boss } from './Enemy.js';
 import { ParticleSystem } from './Particle.js';
 import { SceneRenderer } from './SceneRenderer.js';
-import { checkCollision, getCenter } from '../utils/collision.js';
+import { Level, loadLevels } from './Level.js';
+import { BulletOwner } from './Bullet.js';
 import { InputManager } from '../utils/input.js';
+import { Sfx } from '../utils/sfx.js';
 
 export const GameState = {
   MENU: 'menu',
   PLAYING: 'playing',
   PAUSED: 'paused',
   GAME_OVER: 'gameOver',
-  VICTORY: 'victory'
+  VICTORY: 'victory',
 };
+
+function clamp(v, a, b) {
+  return v < a ? a : (v > b ? b : v);
+}
+
+function aabb(a, b) {
+  return a.x < b.x + b.width && a.x + a.width > b.x &&
+         a.y < b.y + b.height && a.y + a.height > b.y;
+}
 
 export class Game {
   constructor(canvas) {
@@ -20,486 +31,528 @@ export class Game {
     this.ctx = canvas.getContext('2d');
     this.width = GameConfig.CANVAS_WIDTH;
     this.height = GameConfig.CANVAS_HEIGHT;
-    
+
     this.state = GameState.MENU;
     this.currentLevel = 1;
     this.score = 0;
-    this.lives = GameConfig.PLAYER_LIVES;
+    this.lives = GameConfig.PLAYER.lives;
     this.totalKills = 0;
-    
+
+    this.level = null;
+    this.world = null;
+    this.levels = null;
     this.player = null;
     this.enemies = [];
     this.bullets = [];
+    this.grenades = [];
+    this.boss = null;
+    this.bossSpawned = false;
+
+    this.cameraX = 0;
     this.particleSystem = new ParticleSystem();
     this.sceneRenderer = new SceneRenderer(this.width, this.height);
     this.input = new InputManager();
-    
+    this.sfx = new Sfx();
+
     this.lastTime = 0;
-    this.deltaTime = 0;
-    this.animationId = null;
+    this.deltaTime = 16;
     this.currentTime = 0;
-    
-    this.enemiesSpawned = 0;
-    this.lastSpawnTime = 0;
-    this.spawnInterval = GameConfig.ENEMY_SPAWN_INTERVAL;
-    this.largeEnemyQueue = 0;
-    this.smallEnemyQueue = 0;
-    
+    this.animationId = null;
+
     this.screenShake = 0;
     this.screenShakeIntensity = 0;
-    
-    this.ultimateWave = null;
-    
+
     this.onStateChange = null;
     this.onScoreChange = null;
     this.onLivesChange = null;
     this.onEnemyCountChange = null;
     this.onLevelChange = null;
-    this.onUltimateCooldownChange = null;
-    this.onDodgeCooldownChange = null;
+
+    this._lastRemaining = -1;
   }
-  
+
   init() {
-    this.player = new Player(this.width, this.height);
     this.input.setCanvas(this.canvas);
+    this.loadPromise = loadLevels();
+    this.loadPromise.then((data) => {
+      this.levels = data;
+      if (!this.level) {
+        this.level = new Level(data[0]);
+        this.world = this.buildWorld(this.level);
+        this.sceneRenderer.setLevel(this.level.id, this.level.worldWidth);
+      }
+    });
     this.gameLoop(0);
   }
-  
-  startLevel(levelNumber) {
+
+  buildWorld(level) {
+    return {
+      platforms: level.platforms,
+      covers: level.covers,
+      worldWidth: level.worldWidth,
+    };
+  }
+
+  async startLevel(levelNumber) {
+    if (!this.levels) this.levels = await this.loadPromise;
+    const raw = this.levels[Math.min(levelNumber, this.levels.length) - 1] || this.levels[0];
+
+    this.level = new Level(raw);
+    this.level.resetCovers();
+    this.world = this.buildWorld(this.level);
+    this.sceneRenderer.setLevel(this.level.id, this.level.worldWidth);
     this.currentLevel = levelNumber;
-    const config = LevelConfigs[levelNumber - 1];
-    
+
     this.state = GameState.PLAYING;
     this.score = 0;
-    this.lives = GameConfig.PLAYER_LIVES;
+    this.lives = GameConfig.PLAYER.lives;
     this.totalKills = 0;
-    this.enemies = [];
     this.bullets = [];
+    this.grenades = [];
+    this.enemies = [];
+    this.boss = null;
+    this.bossSpawned = false;
     this.particleSystem.clear();
-    this.ultimateWave = null;
-    
-    this.enemiesSpawned = 0;
-    this.lastSpawnTime = this.currentTime;
-    this.largeEnemyQueue = config.largeEnemyCount;
-    this.smallEnemyQueue = config.smallEnemyCount;
-    
-    this.player.reset();
-    this.sceneRenderer.setScene(config.scene);
-    
+    this.screenShake = 0;
+    this.cameraX = clamp(this.level.playerSpawn.x - this.width * 0.4, 0, this.level.worldWidth - this.width);
+
+    this.player = new Player(this.level.playerSpawn.x);
+    this.enemies = this.level.enemySpawns.map((sp) => new Thug(sp.x, sp.y));
+
+    this.input.clearJustPressed();
+    this.sfx.resume();
+
     if (this.onStateChange) this.onStateChange(this.state);
     if (this.onScoreChange) this.onScoreChange(this.score);
     if (this.onLivesChange) this.onLivesChange(this.lives);
-    if (this.onEnemyCountChange) this.onEnemyCountChange(this.getRemainingEnemies());
     if (this.onLevelChange) this.onLevelChange(this.currentLevel);
+    this.emitRemaining(true);
   }
-  
-  getRemainingEnemies() {
-    const total = LevelConfigs[this.currentLevel - 1].largeEnemyCount + 
-                  LevelConfigs[this.currentLevel - 1].smallEnemyCount;
-    return total - this.totalKills;
+
+  emitRemaining(force) {
+    if (!this.level) return;
+    const total = this.level.enemySpawns.length;
+    const remaining = Math.max(0, total - this.totalKills);
+    if (force || remaining !== this._lastRemaining) {
+      this._lastRemaining = remaining;
+      if (this.onEnemyCountChange) this.onEnemyCountChange(remaining);
+    }
   }
-  
+
   pause() {
     if (this.state === GameState.PLAYING) {
       this.state = GameState.PAUSED;
       if (this.onStateChange) this.onStateChange(this.state);
     }
   }
-  
+
   resume() {
     if (this.state === GameState.PAUSED) {
       this.state = GameState.PLAYING;
+      this.input.clearJustPressed();
+      this.sfx.resume();
       if (this.onStateChange) this.onStateChange(this.state);
     }
   }
-  
+
   gameLoop(currentTime) {
     this.currentTime = currentTime;
     this.deltaTime = currentTime - this.lastTime;
     this.lastTime = currentTime;
-    
-    if (this.deltaTime > 50) {
-      this.deltaTime = 16;
-    }
-    
-    this.update(currentTime);
+    if (this.deltaTime > 50) this.deltaTime = 16;
+
+    const dtf = Math.min(this.deltaTime / 16.667, 2);
+
+    this.update(dtf);
     this.render();
-    
+
     this.animationId = requestAnimationFrame((t) => this.gameLoop(t));
   }
-  
-  update(currentTime) {
+
+  update(dtf) {
     this.sceneRenderer.update(this.deltaTime);
-    
+
     if (this.state === GameState.PLAYING) {
-      this.updatePlaying(currentTime);
+      this.updatePlaying(dtf);
     }
-    
+
     this.particleSystem.update(this.deltaTime);
-    
-    if (this.ultimateWave) {
-      this.updateUltimateWave();
-    }
-    
+
+    for (const c of (this.level ? this.level.covers : [])) c.update(this.deltaTime);
+
     if (this.screenShake > 0) {
       this.screenShake -= this.deltaTime;
+      if (this.screenShake < 0) this.screenShake = 0;
     }
   }
-  
-  updatePlaying(currentTime) {
+
+  updatePlaying(dtf) {
     if (this.input.isPauseJustPressed()) {
       this.pause();
       return;
     }
-    
-    if (this.input.isTouchDevice && this.input.isTouchActive()) {
-      // 移动端：触控控制
-      this.player.setTargetX(this.input.getTouchX());
-      
-      // 按住屏幕自动发射轻攻击
-      if (this.player.tryLightFire(currentTime)) {
-        this.fireLightBullet();
-      }
-    } else {
-      // 桌面端：键盘控制
-      this.player.clearTargetX();
-      this.player.moveLeft = this.input.isLeft();
-      this.player.moveRight = this.input.isRight();
-      
-      this.handleDodgeInput(currentTime);
-      this.handleFireInput(currentTime);
+
+    const p = this.player;
+
+    // 输入
+    p.moveLeft = this.input.isLeft();
+    p.moveRight = this.input.isRight();
+    p.setCrouch(this.input.isCrouch() && p.onGround);
+
+    if (this.input.consumeJump()) {
+      if (p.jump()) this.sfx.jump();
     }
-    
-    this.player.update(this.deltaTime, currentTime);
-    
-    this.updateBullets();
-    this.updateEnemies(currentTime);
-    this.spawnEnemies(currentTime);
-    this.checkCollisions();
+
+    if (this.input.isFire() && p.tryFire(this.currentTime)) {
+      this.bullets.push(p.createBullet());
+      this.sfx.shoot();
+    }
+
+    if (this.input.consumeGrenade() && p.tryGrenade(this.currentTime)) {
+      this.grenades.push(p.createGrenade());
+      this.sfx.throwGrenade();
+    }
+
+    p.update(dtf, this.world);
+
+    this.updateCamera();
+    this.updateBullets(dtf);
+    this.updateEnemies(dtf);
+    this.updateGrenades(dtf);
+    this.spawnBoss();
     this.checkGameState();
-    
-    if (this.onUltimateCooldownChange) {
-      this.onUltimateCooldownChange(this.player.getUltimateCooldownPercent(currentTime));
-    }
-    if (this.onDodgeCooldownChange) {
-      this.onDodgeCooldownChange(this.player.getDodgeCooldownPercent(currentTime));
-    }
-    
+
     this.input.clearJustPressed();
   }
-  
-  handleDodgeInput(currentTime) {
-    if (this.input.isKeyJustPressed('ArrowUp') || this.input.isKeyJustPressed('KeyW')) {
-      this.player.dodge(DodgeDirection.UP, currentTime);
-    }
-    if (this.input.isKeyJustPressed('ArrowDown') || this.input.isKeyJustPressed('KeyS')) {
-      this.player.dodge(DodgeDirection.DOWN, currentTime);
-    }
-    if (this.input.isKeyJustPressed('ArrowLeft') && !this.input.isKeyDown('ArrowLeft')) {
-    }
-    if (this.input.isKeyJustPressed('ArrowRight') && !this.input.isKeyDown('ArrowRight')) {
-    }
+
+  updateCamera() {
+    const target = this.player.x + this.player.width / 2 - this.width * 0.4;
+    const clamped = clamp(target, 0, this.level.worldWidth - this.width);
+    // 镜头跟随玩家水平推进
+    this.cameraX += (clamped - this.cameraX) * 0.16;
+    this.cameraX = clamp(this.cameraX, 0, this.level.worldWidth - this.width);
   }
-  
-  handleFireInput(currentTime) {
-    if (this.input.isKeyDown('KeyA') && this.player.tryHeavyFire(currentTime)) {
-      this.fireHeavyBullet();
-    }
-    
-    if (this.input.isKeyDown('KeyB') && this.player.tryLightFire(currentTime)) {
-      this.fireLightBullet();
-    }
-    
-    if (this.input.isKeyJustPressed('KeyC') && this.player.tryUltimate(currentTime)) {
-      this.fireUltimate();
-    }
-    
-    if (this.input.isKeyDown('Space') && this.player.tryLightFire(currentTime)) {
-      this.fireLightBullet();
-    }
-  }
-  
-  fireLightBullet() {
-    const bullet = this.player.createLightBullet();
-    this.bullets.push(bullet);
-  }
-  
-  fireHeavyBullet() {
-    const bullet = this.player.createHeavyBullet();
-    this.bullets.push(bullet);
-    this.addScreenShake(5, 3);
-  }
-  
-  fireUltimate() {
-    this.ultimateWave = {
-      y: this.player.y,
-      speed: 15,
-      damage: GameConfig.ULTIMATE_DAMAGE,
-      active: true
-    };
-    this.addScreenShake(30, 15);
-    
-    for (let i = 0; i < 30; i++) {
-      this.particleSystem.createExplosion(
-        this.player.x + this.player.width / 2 + (Math.random() - 0.5) * 200,
-        this.player.y,
-        GameConfig.ULTIMATE_COLOR,
-        3
-      );
-    }
-  }
-  
-  updateUltimateWave() {
-    if (!this.ultimateWave || !this.ultimateWave.active) return;
-    
-    this.ultimateWave.y -= this.ultimateWave.speed;
-    
-    for (let i = this.enemies.length - 1; i >= 0; i--) {
-      const enemy = this.enemies[i];
-      if (enemy.y + enemy.height > this.ultimateWave.y && enemy.y < this.ultimateWave.y + 50) {
-        if (!enemy.hitByUltimate) {
-          enemy.hitByUltimate = true;
-          const isDead = enemy.takeDamage(this.ultimateWave.damage);
-          
-          const enemyCenter = getCenter({
-            x: enemy.x, y: enemy.y,
-            width: enemy.width, height: enemy.height
-          });
-          this.particleSystem.createHitEffect(enemyCenter.x, enemyCenter.y, GameConfig.ULTIMATE_COLOR);
-          
-          if (isDead) {
-            this.particleSystem.createExplosion(enemyCenter.x, enemyCenter.y, enemy.color, 25);
-            this.score += enemy.score;
-            this.totalKills++;
-            this.enemies.splice(i, 1);
-            
-            this.addScreenShake(10, 5);
-            
-            if (this.onScoreChange) this.onScoreChange(this.score);
-            if (this.onEnemyCountChange) this.onEnemyCountChange(this.getRemainingEnemies());
-          }
-        }
-      } else if (enemy.y + enemy.height < this.ultimateWave.y - 100) {
-        enemy.hitByUltimate = false;
-      }
-    }
-    
-    if (this.ultimateWave.y < -100) {
-      this.ultimateWave.active = false;
-      this.ultimateWave = null;
-    }
-  }
-  
-  updateBullets() {
+
+  updateBullets(dtf) {
     for (let i = this.bullets.length - 1; i >= 0; i--) {
-      this.bullets[i].update(this.deltaTime);
-      if (!this.bullets[i].active) {
-        this.bullets.splice(i, 1);
+      const b = this.bullets[i];
+      b.update(dtf);
+      this.resolveBullet(b);
+
+      const offScreen = b.x < this.cameraX - 260 ||
+                        b.x > this.cameraX + this.width + 260 ||
+                        b.y < -260 || b.y > this.height + 260;
+      if (offScreen) b.active = false;
+
+      if (!b.active) this.bullets.splice(i, 1);
+    }
+  }
+
+  resolveBullet(b) {
+    const bb = b.getBounds();
+
+    // 掩体优先：挡住飞向玩家的子弹，并可以被打碎
+    for (const c of this.level.covers) {
+      if (c.hp <= 0) continue;
+      if (b.ignoreCover === c) continue;
+      if (aabb(bb, c.getBounds())) {
+        b.active = false;
+        this.particleSystem.createHitEffect(b.x + b.width / 2, b.y + b.height / 2, '#ffb347');
+        if (c.takeDamage(b.damage)) {
+          const cc = c.getCenter();
+          this.particleSystem.createExplosion(cc.x, cc.y, '#ffa502', 22);
+          this.addScreenShake(12, 6);
+          this.sfx.explosion();
+          this.releaseCoverClaims(c);
+        }
+        return;
+      }
+    }
+
+    if (b.owner === BulletOwner.PLAYER) {
+      for (let j = 0; j < this.enemies.length; j++) {
+        const e = this.enemies[j];
+        if (e.dead) continue;
+        if (aabb(bb, e.getBounds())) {
+          b.active = false;
+          this.particleSystem.createHitEffect(b.x + b.width / 2, b.y + b.height / 2, '#ff5a5a');
+          const died = e.takeDamage(b.damage);
+          this.addScreenShake(3, 2);
+          if (died) this.killEnemy(e);
+          return;
+        }
+      }
+    } else {
+      const p = this.player;
+      if (!p.isInvincibleNow(this.currentTime) && aabb(bb, p.getBounds())) {
+        b.active = false;
+        this.damagePlayer();
       }
     }
   }
-  
-  updateEnemies(currentTime) {
+
+  releaseCoverClaims(cover) {
+    for (const e of this.enemies) {
+      if (e.cover === cover) e.cover = null;
+    }
+  }
+
+  updateEnemies(dtf) {
     for (let i = this.enemies.length - 1; i >= 0; i--) {
-      const enemy = this.enemies[i];
-      enemy.update(this.deltaTime, currentTime);
-      
-      if (enemy.isOffScreen(this.height)) {
+      const e = this.enemies[i];
+      if (e.dead) {
         this.enemies.splice(i, 1);
-        this.loseLife();
+        continue;
       }
+      if (!e.awake) {
+        if (e.x < this.cameraX + this.width + 140) e.awake = true;
+        else continue;
+      }
+      // 掩护体被摧毁后释放占用
+      if (e.cover && e.cover.hp <= 0) e.cover = null;
+
+      const bullet = e.update(dtf, this.deltaTime, this.currentTime, this.world, this.player);
+      if (bullet) {
+        this.bullets.push(bullet);
+        this.sfx.enemyShoot();
+      }
+      if (e.hitFlash > 0) e.hitFlash -= this.deltaTime;
     }
   }
-  
-  spawnEnemies(currentTime) {
-    const totalQueued = this.largeEnemyQueue + this.smallEnemyQueue;
-    if (totalQueued <= 0) return;
-    
-    if (currentTime - this.lastSpawnTime >= this.spawnInterval) {
-      this.lastSpawnTime = currentTime;
-      
-      let isLarge = false;
-      if (this.largeEnemyQueue > 0 && this.smallEnemyQueue > 0) {
-        isLarge = Math.random() < (this.largeEnemyQueue / totalQueued);
-      } else if (this.largeEnemyQueue > 0) {
-        isLarge = true;
-      }
-      
-      const spawnX = GameConfig.ENEMY_SPAWN_X_MIN + 
-        Math.random() * (GameConfig.ENEMY_SPAWN_X_MAX - GameConfig.ENEMY_SPAWN_X_MIN);
-      const spawnY = GameConfig.ENEMY_SPAWN_Y;
-      
-      if (isLarge) {
-        this.enemies.push(new LargeEnemy(spawnX - GameConfig.LARGE_ENEMY_WIDTH / 2, spawnY));
-        this.largeEnemyQueue--;
-      } else {
-        this.enemies.push(new SmallEnemy(spawnX - GameConfig.SMALL_ENEMY_WIDTH / 2, spawnY));
-        this.smallEnemyQueue--;
-      }
-      
-      this.enemiesSpawned++;
-    }
-  }
-  
-  checkCollisions() {
-    for (let i = this.bullets.length - 1; i >= 0; i--) {
-      const bullet = this.bullets[i];
-      const bulletBounds = bullet.getBounds();
-      
-      for (let j = this.enemies.length - 1; j >= 0; j--) {
-        const enemy = this.enemies[j];
-        const enemyBounds = {
-          x: enemy.x,
-          y: enemy.y,
-          width: enemy.width,
-          height: enemy.height
-        };
-        
-        if (checkCollision(bulletBounds, enemyBounds)) {
-          bullet.active = false;
-          
-          const hitCenter = getCenter(bulletBounds);
-          this.particleSystem.createHitEffect(hitCenter.x, hitCenter.y, enemy.color);
-          
-          const isDead = enemy.takeDamage(bullet.damage);
-          
-          if (isDead) {
-            const enemyCenter = getCenter(enemyBounds);
-            this.particleSystem.createExplosion(enemyCenter.x, enemyCenter.y, enemy.color, 25);
-            this.score += enemy.score;
-            this.totalKills++;
-            this.enemies.splice(j, 1);
-            
-            this.addScreenShake(10, 5);
-            
-            if (this.onScoreChange) this.onScoreChange(this.score);
-            if (this.onEnemyCountChange) this.onEnemyCountChange(this.getRemainingEnemies());
+
+  updateGrenades(dtf) {
+    for (let i = this.grenades.length - 1; i >= 0; i--) {
+      const g = this.grenades[i];
+      g.update(dtf, this.deltaTime);
+
+      // 落地爆炸
+      let hitGround = false;
+      if (g.vy > 0) {
+        for (const p of this.level.platforms) {
+          if (aabb({ x: g.x, y: g.y, width: g.width, height: g.height },
+                   { x: p.x, y: p.y, width: p.w, height: p.h })) {
+            hitGround = true;
+            break;
           }
-          
-          break;
         }
       }
+
+      if (hitGround || !g.active) {
+        this.explodeGrenade(g);
+        this.grenades.splice(i, 1);
+      }
     }
   }
-  
-  loseLife() {
-    if (this.player.isInvincible) return;
-    
+
+  explodeGrenade(g) {
+    const c = g.getCenter();
+    const radius = GameConfig.GRENADE.radius;
+    this.particleSystem.createExplosion(c.x, c.y, '#ffa502', 32);
+    this.particleSystem.createExplosion(c.x, c.y, '#ffffff', 12);
+    this.addScreenShake(20, 11);
+    this.sfx.explosion();
+
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const ec = { x: e.x + e.width / 2, y: e.y + e.height / 2 };
+      const d = Math.hypot(ec.x - c.x, ec.y - c.y);
+      if (d < radius) {
+        const died = e.takeDamage(GameConfig.GRENADE.damage);
+        if (died) this.killEnemy(e);
+      }
+    }
+
+    for (const cov of this.level.covers) {
+      if (cov.hp <= 0) continue;
+      const cc = cov.getCenter();
+      const d = Math.hypot(cc.x - c.x, cc.y - c.y);
+      if (d < radius && cov.takeDamage(GameConfig.GRENADE.damage)) {
+        this.releaseCoverClaims(cov);
+      }
+    }
+  }
+
+  killEnemy(e) {
+    e.dead = true;
+    const c = { x: e.x + e.width / 2, y: e.y + e.height / 2 };
+    this.particleSystem.createExplosion(c.x, c.y, '#ff5a5a', 26);
+    this.particleSystem.createExplosion(c.x, c.y, '#ffd24a', 10);
+    this.addScreenShake(10, 5);
+    this.sfx.explosion();
+
+    this.score += e.score;
+    this.totalKills++;
+    if (this.onScoreChange) this.onScoreChange(this.score);
+    this.emitRemaining(false);
+
+    if (e === this.boss) {
+      this.state = GameState.VICTORY;
+      if (this.onStateChange) this.onStateChange(this.state);
+    }
+  }
+
+  damagePlayer() {
     this.lives--;
     this.addScreenShake(20, 10);
-    
-    this.player.isInvincible = true;
-    this.player.invincibleEndTime = this.currentTime + 1000;
-    
+    this.sfx.hurt();
+    this.player.hurt(this.currentTime);
     if (this.onLivesChange) this.onLivesChange(this.lives);
   }
-  
+
+  spawnBoss() {
+    if (!this.level.boss || this.bossSpawned) return;
+    if (this.player.x > this.level.boss.x - 760) {
+      this.bossSpawned = true;
+      this.boss = new Boss(this.level.boss.x, GameConfig.GROUND_Y, this.level.boss.hp);
+      this.boss.awake = true;
+      this.enemies.push(this.boss);
+    }
+  }
+
   addScreenShake(duration, intensity) {
     this.screenShake = Math.max(this.screenShake, duration);
     this.screenShakeIntensity = Math.max(this.screenShakeIntensity, intensity);
   }
-  
+
   checkGameState() {
     if (this.lives <= 0) {
       this.state = GameState.GAME_OVER;
       if (this.onStateChange) this.onStateChange(this.state);
       return;
     }
-    
-    const totalQueued = this.largeEnemyQueue + this.smallEnemyQueue;
-    const noMoreEnemies = totalQueued <= 0 && this.enemies.length === 0;
-    
-    if (noMoreEnemies) {
-      if (this.totalKills > 6) {
-        this.state = GameState.VICTORY;
-      } else {
-        this.state = GameState.GAME_OVER;
-      }
+    // 无 BOSS 的关卡：清空敌人并推进到终点即胜利
+    if (!this.level.boss && this.enemies.length === 0 &&
+        this.player.x >= this.level.worldWidth - this.width * 0.5) {
+      this.state = GameState.VICTORY;
       if (this.onStateChange) this.onStateChange(this.state);
     }
   }
-  
+
   render() {
-    this.ctx.save();
-    
-    if (this.screenShake > 0) {
-      const shakeX = (Math.random() - 0.5) * this.screenShakeIntensity * 2;
-      const shakeY = (Math.random() - 0.5) * this.screenShakeIntensity * 2;
-      this.ctx.translate(shakeX, shakeY);
-    }
-    
-    this.ctx.fillStyle = '#000';
-    this.ctx.fillRect(0, 0, this.width, this.height);
-    
-    const config = LevelConfigs[this.currentLevel - 1] || LevelConfigs[0];
-    this.sceneRenderer.draw(this.ctx, config);
-    
-    if (this.state === GameState.PLAYING || 
-        this.state === GameState.PAUSED || 
-        this.state === GameState.GAME_OVER ||
-        this.state === GameState.VICTORY) {
-      
-      if (this.ultimateWave && this.ultimateWave.active) {
-        this.drawUltimateWave();
-      }
-      
-      for (const bullet of this.bullets) {
-        bullet.draw(this.ctx);
-      }
-      
-      for (const enemy of this.enemies) {
-        enemy.draw(this.ctx);
-      }
-      
-      if (this.player) {
-        this.player.draw(this.ctx, this.currentTime);
-      }
-      
-      this.particleSystem.draw(this.ctx);
-    }
-    
-    this.ctx.restore();
-  }
-  
-  drawUltimateWave() {
     const ctx = this.ctx;
-    const y = this.ultimateWave.y;
-    
-    const gradient = ctx.createLinearGradient(0, y - 50, 0, y + 50);
-    gradient.addColorStop(0, 'rgba(255, 71, 87, 0)');
-    gradient.addColorStop(0.4, 'rgba(255, 71, 87, 0.3)');
-    gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.8)');
-    gradient.addColorStop(0.6, 'rgba(255, 71, 87, 0.3)');
-    gradient.addColorStop(1, 'rgba(255, 71, 87, 0)');
-    
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, y - 50, this.width, 100);
-    
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 3;
-    ctx.shadowColor = GameConfig.ULTIMATE_COLOR;
-    ctx.shadowBlur = 20;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(this.width, y);
-    ctx.stroke();
-    
-    ctx.shadowBlur = 0;
-  }
-  
-  getGameData() {
-    return {
-      level: this.currentLevel,
-      score: this.score,
-      lives: this.lives,
-      kills: this.totalKills,
-      state: this.state
-    };
-  }
-  
-  destroy() {
-    if (this.animationId) {
-      cancelAnimationFrame(this.animationId);
+    ctx.save();
+
+    let shakeX = 0;
+    let shakeY = 0;
+    if (this.screenShake > 0) {
+      shakeX = (Math.random() - 0.5) * this.screenShakeIntensity * 2;
+      shakeY = (Math.random() - 0.5) * this.screenShakeIntensity * 2;
     }
+
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    if (!this.level) {
+      ctx.restore();
+      return;
+    }
+
+    // 背景视差层（自带 camera 偏移）
+    this.sceneRenderer.draw(ctx, this.cameraX, this.level);
+
+    const showWorld = this.state === GameState.PLAYING ||
+                      this.state === GameState.PAUSED ||
+                      this.state === GameState.GAME_OVER ||
+                      this.state === GameState.VICTORY;
+
+    if (showWorld && this.player) {
+      ctx.save();
+      ctx.translate(-Math.round(this.cameraX) + shakeX, shakeY);
+
+      this.drawPlatforms();
+      for (const c of this.level.covers) {
+        if (this.isVisible(c.x, c.w)) c.draw(ctx);
+      }
+      for (const g of this.grenades) g.draw(ctx);
+      for (const b of this.bullets) b.draw(ctx);
+      for (const e of this.enemies) {
+        if (e.awake && this.isVisible(e.x, e.width)) e.draw(ctx, this.currentTime);
+      }
+      this.player.draw(ctx, this.currentTime, this.cameraX);
+      this.particleSystem.draw(ctx);
+
+      ctx.restore();
+
+      this.drawCanvasHud(ctx);
+    }
+
+    ctx.restore();
+  }
+
+  isVisible(x, w) {
+    return x + w > this.cameraX - 80 && x < this.cameraX + this.width + 80;
+  }
+
+  drawPlatforms() {
+    const ctx = this.ctx;
+    for (const p of this.level.platforms) {
+      if (!this.isVisible(p.x, p.w)) continue;
+
+      if (p.y >= GameConfig.GROUND_Y) {
+        // 地面：沥青 + 人行道 + 霓虹反光
+        ctx.fillStyle = '#12121c';
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+        ctx.fillStyle = '#1e2130';
+        ctx.fillRect(p.x, p.y, p.w, 9);
+        ctx.fillStyle = 'rgba(255,46,136,0.20)';
+        ctx.fillRect(p.x, p.y + 9, p.w, 3);
+        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        const start = Math.floor(p.x / 220) * 220;
+        for (let x = start; x < p.x + p.w; x += 220) {
+          ctx.fillRect(Math.max(x, p.x), p.y + 16, 70, 46);
+        }
+      } else {
+        // 浮空平台
+        ctx.fillStyle = '#39425a';
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+        ctx.fillStyle = 'rgba(255,255,255,0.20)';
+        ctx.fillRect(p.x, p.y, p.w, 3);
+        ctx.fillStyle = 'rgba(0,0,0,0.40)';
+        ctx.fillRect(p.x, p.y + p.h - 3, p.w, 3);
+        ctx.fillStyle = 'rgba(0,229,255,0.28)';
+        ctx.fillRect(p.x, p.y + p.h, p.w, 2);
+      }
+    }
+  }
+
+  drawCanvasHud(ctx) {
+    // 推进进度条
+    const prog = clamp(this.player.x / this.level.worldWidth, 0, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(0, 0, this.width, 4);
+    ctx.fillStyle = '#ff2e88';
+    ctx.fillRect(0, 0, this.width * prog, 4);
+
+    // BOSS 血条
+    if (this.boss && !this.boss.dead && this.boss.awake) {
+      const bw = 420;
+      const bx = (this.width - bw) / 2;
+      const by = 44;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(bx - 3, by - 3, bw + 6, 20);
+      ctx.fillStyle = '#2a1030';
+      ctx.fillRect(bx, by, bw, 14);
+      ctx.fillStyle = '#ff2e88';
+      ctx.fillRect(bx, by, bw * Math.max(0, this.boss.hp / this.boss.maxHp), 14);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('帮派首领', this.width / 2, by + 11);
+      ctx.textAlign = 'left';
+    }
+
+    // 手雷冷却
+    const ratio = clamp((this.currentTime - this.player.lastGrenade) / GameConfig.PLAYER.grenadeCooldown, 0, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(16, this.height - 30, 120, 12);
+    ctx.fillStyle = ratio >= 1 ? '#39ff88' : '#ffa502';
+    ctx.fillRect(16, this.height - 30, 120 * ratio, 12);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '11px monospace';
+    ctx.fillText('手雷 [G]', 16, this.height - 34);
+  }
+
+  destroy() {
+    if (this.animationId) cancelAnimationFrame(this.animationId);
   }
 }

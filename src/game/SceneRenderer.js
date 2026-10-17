@@ -1,337 +1,223 @@
-import { GameConfig, LevelConfigs } from '../config/gameConfig.js';
+import { GameConfig } from '../config/gameConfig.js';
+
+// 横版视差背景：80 年代赛博朋克霓虹雨夜城市。
+// 远/近两层视差 + 中景霓虹招牌 + 雨。所有元素横向滚动，强化"向右推进"。
+
+function makeRng(seed) {
+  let s = seed % 2147483647;
+  if (s <= 0) s += 2147483646;
+  return () => {
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+
+const NEON = ['#ff2e88', '#00e5ff', '#b14aed', '#39ff88', '#ff8a3d', '#ffe066'];
 
 export class SceneRenderer {
   constructor(canvasWidth, canvasHeight) {
-    this.canvasWidth = canvasWidth;
-    this.canvasHeight = canvasHeight;
-    this.currentScene = 'space';
-    this.bgCache = null;
-    this.bgCanvas = document.createElement('canvas');
-    this.bgCanvas.width = canvasWidth;
-    this.bgCanvas.height = canvasHeight;
-    this.bgCtx = this.bgCanvas.getContext('2d');
-    
-    this.stars = [];
-    this.bubbles = [];
-    this.sandParticles = [];
-    this.leaves = [];
-    this.clouds = [];
-    
-    this.animationTime = 0;
-    this.initBackgroundElements();
+    this.w = canvasWidth;
+    this.h = canvasHeight;
+    this.currentLevelId = 1;
+    this.rain = [];
+    this.time = 0;
+    this.layers = null;
+    this.initRain();
   }
-  
-  initBackgroundElements() {
-    for (let i = 0; i < 100; i++) {
-      this.stars.push({
-        x: Math.random() * this.canvasWidth,
-        y: Math.random() * this.canvasHeight,
-        size: Math.random() * 2 + 0.5,
-        speed: Math.random() * 0.3 + 0.1,
-        twinkle: Math.random() * Math.PI * 2
-      });
-    }
-    
-    for (let i = 0; i < 20; i++) {
-      this.bubbles.push({
-        x: Math.random() * this.canvasWidth,
-        y: Math.random() * this.canvasHeight,
-        size: Math.random() * 15 + 5,
-        speed: Math.random() * 1 + 0.5,
-        wobble: Math.random() * Math.PI * 2
-      });
-    }
-    
-    for (let i = 0; i < 30; i++) {
-      this.sandParticles.push({
-        x: Math.random() * this.canvasWidth,
-        y: Math.random() * this.canvasHeight,
-        size: Math.random() * 3 + 1,
-        speed: Math.random() * 2 + 1,
-        opacity: Math.random() * 0.5 + 0.2
-      });
-    }
-    
-    for (let i = 0; i < 15; i++) {
-      this.leaves.push({
-        x: Math.random() * this.canvasWidth,
-        y: Math.random() * this.canvasHeight,
-        size: Math.random() * 10 + 5,
-        speed: Math.random() * 1.5 + 0.5,
-        rotation: Math.random() * Math.PI * 2,
-        rotSpeed: (Math.random() - 0.5) * 0.1
-      });
-    }
-    
-    for (let i = 0; i < 5; i++) {
-      this.clouds.push({
-        x: Math.random() * this.canvasWidth,
-        y: Math.random() * this.canvasHeight * 0.6,
-        width: Math.random() * 150 + 100,
-        height: Math.random() * 40 + 30,
-        speed: Math.random() * 0.5 + 0.2,
-        opacity: Math.random() * 0.3 + 0.2
+
+  initRain() {
+    for (let i = 0; i < 170; i++) {
+      this.rain.push({
+        x: Math.random() * (this.w + 200) - 100,
+        y: Math.random() * this.h,
+        len: 8 + Math.random() * 16,
+        speed: 9 + Math.random() * 9,
+        alpha: 0.12 + Math.random() * 0.22,
       });
     }
   }
-  
-  setScene(sceneType) {
-    this.currentScene = sceneType;
-    this.renderCachedBackground();
+
+  setLevel(levelId, worldWidth) {
+    if (this.currentLevelId === levelId && this.layers) return;
+    this.currentLevelId = levelId;
+    this.layers = this.buildLayers(levelId, worldWidth);
   }
-  
-  renderCachedBackground() {
-    const config = LevelConfigs.find(c => c.scene === this.currentScene);
-    if (!config) return;
-    
-    const ctx = this.bgCtx;
-    const colors = config.bgColors;
-    
-    const gradient = ctx.createLinearGradient(0, 0, 0, this.canvasHeight);
-    gradient.addColorStop(0, colors[0]);
-    gradient.addColorStop(0.5, colors[1]);
-    gradient.addColorStop(1, colors[2]);
-    
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
-    
-    if (config.craters) {
-      this.drawStaticCraters(ctx);
+
+  buildLayers(levelId, worldWidth) {
+    const rng = makeRng(levelId * 7919 + 13);
+    const far = [];
+    const mid = [];
+    const near = [];
+
+    // 远景天际线
+    let x = -200;
+    while (x < worldWidth * 0.2 + this.w + 200) {
+      const bw = 60 + rng() * 110;
+      const bh = 90 + rng() * 200;
+      far.push({ x, w: bw, h: bh, tint: 0.35 + rng() * 0.25 });
+      x += bw + 6;
     }
-    
-    if (config.sandDunes) {
-      this.drawSandDunes(ctx);
+
+    // 中景建筑（带霓虹招牌）
+    x = -200;
+    while (x < worldWidth * 0.45 + this.w + 200) {
+      const bw = 90 + rng() * 150;
+      const bh = 150 + rng() * 220;
+      const wins = [];
+      const cols = Math.max(2, Math.floor(bw / 26));
+      const rows = Math.max(3, Math.floor(bh / 34));
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (rng() < 0.55) {
+            wins.push({
+              x: 8 + c * ((bw - 16) / cols),
+              y: 12 + r * ((bh - 24) / rows),
+              w: Math.max(3, (bw - 16) / cols - 8),
+              h: Math.max(3, (bh - 24) / rows - 10),
+              lit: rng() < 0.6 ? NEON[Math.floor(rng() * NEON.length)] : '#ffd27a',
+            });
+          }
+        }
+      }
+      const sign = rng() < 0.7
+        ? { color: NEON[Math.floor(rng() * NEON.length)], h: 6 + rng() * 10, w: bw * (0.4 + rng() * 0.4), y: 10 + rng() * (bh * 0.5) }
+        : null;
+      mid.push({ x, w: bw, h: bh, wins, sign });
+      x += bw + 14;
     }
-    
-    if (config.grass) {
-      this.drawGrass(ctx);
+
+    // 近景剪影（栏杆/招牌/树）
+    x = -200;
+    while (x < worldWidth * 0.85 + this.w + 200) {
+      near.push({ x, w: 40 + rng() * 90, h: 40 + rng() * 90, kind: rng() < 0.5 ? 'fence' : 'sign' });
+      x += 120 + rng() * 180;
     }
+
+    return { far, mid, near };
   }
-  
-  drawStaticCraters(ctx) {
-    const craters = [
-      { x: 150, y: 200, r: 60 },
-      { x: 600, y: 350, r: 80 },
-      { x: 350, y: 150, r: 40 },
-      { x: 700, y: 100, r: 30 },
-      { x: 100, y: 450, r: 50 },
-    ];
-    
-    for (const crater of craters) {
-      const gradient = ctx.createRadialGradient(
-        crater.x - crater.r * 0.3, crater.y - crater.r * 0.3, 0,
-        crater.x, crater.y, crater.r
-      );
-      gradient.addColorStop(0, 'rgba(0, 0, 0, 0.3)');
-      gradient.addColorStop(0.7, 'rgba(0, 0, 0, 0.1)');
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(crater.x, crater.y, crater.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-  
-  drawSandDunes(ctx) {
-    ctx.fillStyle = 'rgba(139, 105, 20, 0.3)';
-    ctx.beginPath();
-    ctx.moveTo(0, 450);
-    ctx.quadraticCurveTo(200, 380, 400, 420);
-    ctx.quadraticCurveTo(600, 460, 800, 400);
-    ctx.lineTo(800, 600);
-    ctx.lineTo(0, 600);
-    ctx.closePath();
-    ctx.fill();
-    
-    ctx.fillStyle = 'rgba(196, 163, 90, 0.4)';
-    ctx.beginPath();
-    ctx.moveTo(0, 500);
-    ctx.quadraticCurveTo(250, 460, 500, 490);
-    ctx.quadraticCurveTo(700, 520, 800, 480);
-    ctx.lineTo(800, 600);
-    ctx.lineTo(0, 600);
-    ctx.closePath();
-    ctx.fill();
-  }
-  
-  drawGrass(ctx) {
-    ctx.fillStyle = 'rgba(34, 139, 34, 0.3)';
-    for (let i = 0; i < 50; i++) {
-      const x = i * 20 + Math.random() * 10;
-      const height = 20 + Math.random() * 30;
-      const y = this.canvasHeight - height;
-      
-      ctx.beginPath();
-      ctx.moveTo(x, this.canvasHeight);
-      ctx.quadraticCurveTo(x - 5, y + height / 2, x - 3, y);
-      ctx.quadraticCurveTo(x + 3, y + 5, x + 5, this.canvasHeight);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
-  
+
   update(deltaTime) {
-    this.animationTime += deltaTime;
-    
-    for (const star of this.stars) {
-      star.twinkle += 0.02;
-    }
-    
-    for (const bubble of this.bubbles) {
-      bubble.y -= bubble.speed;
-      bubble.wobble += 0.05;
-      if (bubble.y < -20) {
-        bubble.y = this.canvasHeight + 20;
-        bubble.x = Math.random() * this.canvasWidth;
-      }
-    }
-    
-    for (const sand of this.sandParticles) {
-      sand.x += sand.speed;
-      sand.y += sand.speed * 0.3;
-      if (sand.x > this.canvasWidth + 10) {
-        sand.x = -10;
-        sand.y = Math.random() * this.canvasHeight;
-      }
-    }
-    
-    for (const leaf of this.leaves) {
-      leaf.y += leaf.speed;
-      leaf.x += Math.sin(this.animationTime * 0.01 + leaf.x) * 0.5;
-      leaf.rotation += leaf.rotSpeed;
-      if (leaf.y > this.canvasHeight + 20) {
-        leaf.y = -20;
-        leaf.x = Math.random() * this.canvasWidth;
-      }
-    }
-    
-    for (const cloud of this.clouds) {
-      cloud.x += cloud.speed;
-      if (cloud.x - cloud.width > this.canvasWidth) {
-        cloud.x = -cloud.width;
-        cloud.y = Math.random() * this.canvasHeight * 0.6;
+    this.time += deltaTime;
+    for (const d of this.rain) {
+      d.y += d.speed;
+      d.x -= d.speed * 0.18;
+      if (d.y > this.h) {
+        d.y = -20;
+        d.x = Math.random() * (this.w + 200) - 100;
       }
     }
   }
-  
-  draw(ctx, config) {
-    ctx.drawImage(this.bgCanvas, 0, 0);
-    
-    if (config.stars) {
-      this.drawStars(ctx);
-    }
-    
-    if (config.bubbles) {
-      this.drawBubbles(ctx);
-    }
-    
-    if (config.sandDunes) {
-      this.drawSandParticles(ctx);
-    }
-    
-    if (config.leaves) {
-      this.drawLeaves(ctx);
-    }
-    
-    if (config.clouds) {
-      this.drawClouds(ctx);
-    }
-    
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-    ctx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
+
+  draw(ctx, cameraX, level) {
+    this.setLevel(level.id, level.worldWidth);
+    const horizon = GameConfig.GROUND_Y;
+
+    // 夜空
+    const sky = ctx.createLinearGradient(0, 0, 0, this.h);
+    sky.addColorStop(0, '#08091a');
+    sky.addColorStop(0.55, '#160f2e');
+    sky.addColorStop(1, '#2a1038');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, this.w, this.h);
+
+    // 地平线霓虹辉光
+    const glow = ctx.createRadialGradient(this.w * 0.7, horizon - 40, 0, this.w * 0.7, horizon - 40, 420);
+    glow.addColorStop(0, 'rgba(255,46,136,0.22)');
+    glow.addColorStop(1, 'rgba(255,46,136,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, this.w, this.h);
+
+    this.drawFar(ctx, cameraX);
+    this.drawMid(ctx, cameraX);
+    this.drawNear(ctx, cameraX);
+    this.drawRain(ctx);
+
+    // 暗角
+    const vig = ctx.createRadialGradient(this.w / 2, this.h / 2, this.h * 0.35, this.w / 2, this.h / 2, this.h * 0.9);
+    vig.addColorStop(0, 'rgba(0,0,0,0)');
+    vig.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, this.w, this.h);
   }
-  
-  drawStars(ctx) {
-    for (const star of this.stars) {
-      const alpha = 0.5 + Math.sin(star.twinkle) * 0.5;
-      ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+
+  drawFar(ctx, cameraX) {
+    const off = -cameraX * 0.15;
+    const base = GameConfig.GROUND_Y + 4;
+    for (const b of this.layers.far) {
+      const sx = b.x + off;
+      if (sx > this.w + 40 || sx + b.w < -40) continue;
+      ctx.fillStyle = `rgba(20,26,52,${b.tint})`;
+      ctx.fillRect(sx, base - b.h, b.w, b.h);
+      // 楼顶航标灯
+      ctx.fillStyle = 'rgba(255,70,90,0.7)';
+      ctx.fillRect(sx + b.w * 0.5 - 1, base - b.h + 4, 2, 2);
+    }
+  }
+
+  drawMid(ctx, cameraX) {
+    const off = -cameraX * 0.4;
+    const base = GameConfig.GROUND_Y + 10;
+    const t = this.time;
+    for (const b of this.layers.mid) {
+      const sx = b.x + off;
+      if (sx > this.w + 60 || sx + b.w < -60) continue;
+
+      ctx.fillStyle = '#1b2138';
+      ctx.fillRect(sx, base - b.h, b.w, b.h);
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(sx, base - b.h, 6, b.h);
+
+      for (const win of b.wins) {
+        ctx.fillStyle = win.lit;
+        ctx.globalAlpha = 0.55 + 0.35 * Math.abs(Math.sin(t * 0.001 + win.y * 0.1));
+        ctx.fillRect(sx + win.x, base - b.h + win.y, win.w, win.h);
+      }
+      ctx.globalAlpha = 1;
+
+      if (b.sign) {
+        const flick = 0.65 + 0.35 * Math.abs(Math.sin(t * 0.004 + b.x));
+        ctx.fillStyle = b.sign.color;
+        ctx.globalAlpha = flick;
+        ctx.fillRect(sx + b.w * 0.2, base - b.h + b.sign.y, b.sign.w, b.sign.h);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(sx + b.w * 0.2, base - b.h + b.sign.y, b.sign.w, b.sign.h);
+      }
+    }
+  }
+
+  drawNear(ctx, cameraX) {
+    const off = -cameraX * 0.82;
+    const base = GameConfig.GROUND_Y + 24;
+    for (const b of this.layers.near) {
+      const sx = b.x + off;
+      if (sx > this.w + 60 || sx + b.w < -60) continue;
+      ctx.fillStyle = 'rgba(8,10,20,0.85)';
+      if (b.kind === 'fence') {
+        ctx.fillRect(sx, base - 26, b.w, 26);
+        ctx.fillStyle = 'rgba(120,140,180,0.25)';
+        for (let i = 0; i < b.w; i += 12) {
+          ctx.fillRect(sx + i, base - 26, 2, 26);
+        }
+      } else {
+        ctx.fillRect(sx, base - b.h, 8, b.h);
+        ctx.fillStyle = 'rgba(255,46,136,0.35)';
+        ctx.fillRect(sx - 6, base - b.h, 20, 4);
+      }
+    }
+  }
+
+  drawRain(ctx) {
+    ctx.strokeStyle = 'rgba(180,210,255,0.5)';
+    ctx.lineWidth = 1;
+    for (const d of this.rain) {
+      ctx.globalAlpha = d.alpha;
       ctx.beginPath();
-      ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-  
-  drawBubbles(ctx) {
-    for (const bubble of this.bubbles) {
-      const wobbleX = Math.sin(bubble.wobble) * 10;
-      
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(bubble.x + wobbleX, bubble.y, bubble.size, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x - d.len * 0.18, d.y + d.len);
       ctx.stroke();
-      
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.beginPath();
-      ctx.arc(
-        bubble.x + wobbleX - bubble.size * 0.3,
-        bubble.y - bubble.size * 0.3,
-        bubble.size * 0.2,
-        0, Math.PI * 2
-      );
-      ctx.fill();
     }
-  }
-  
-  drawSandParticles(ctx) {
-    for (const sand of this.sandParticles) {
-      ctx.fillStyle = `rgba(196, 163, 90, ${sand.opacity})`;
-      ctx.beginPath();
-      ctx.arc(sand.x, sand.y, sand.size, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-  
-  drawLeaves(ctx) {
-    for (const leaf of this.leaves) {
-      ctx.save();
-      ctx.translate(leaf.x, leaf.y);
-      ctx.rotate(leaf.rotation);
-      
-      ctx.fillStyle = 'rgba(34, 139, 34, 0.6)';
-      ctx.beginPath();
-      ctx.ellipse(0, 0, leaf.size, leaf.size * 0.4, 0, 0, Math.PI * 2);
-      ctx.fill();
-      
-      ctx.strokeStyle = 'rgba(0, 100, 0, 0.5)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(-leaf.size, 0);
-      ctx.lineTo(leaf.size, 0);
-      ctx.stroke();
-      
-      ctx.restore();
-    }
-  }
-  
-  drawClouds(ctx) {
-    for (const cloud of this.clouds) {
-      const gradient = ctx.createRadialGradient(
-        cloud.x + cloud.width * 0.3, cloud.y, 0,
-        cloud.x + cloud.width * 0.3, cloud.y, cloud.width * 0.6
-      );
-      gradient.addColorStop(0, `rgba(255, 255, 255, ${cloud.opacity})`);
-      gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-      
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.ellipse(
-        cloud.x + cloud.width * 0.3, cloud.y,
-        cloud.width * 0.5, cloud.height * 0.5,
-        0, 0, Math.PI * 2
-      );
-      ctx.fill();
-      
-      ctx.beginPath();
-      ctx.ellipse(
-        cloud.x + cloud.width * 0.6, cloud.y + 10,
-        cloud.width * 0.4, cloud.height * 0.4,
-        0, 0, Math.PI * 2
-      );
-      ctx.fill();
-    }
+    ctx.globalAlpha = 1;
   }
 }
