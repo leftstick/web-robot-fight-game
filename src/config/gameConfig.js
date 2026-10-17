@@ -80,6 +80,13 @@ export const GameConfig = {
     playerBullet: '#ffe066',
     neon: ['#ff2e88', '#00e5ff', '#b14aed', '#39ff88', '#ff8a3d'],
   },
+
+  // 武器槽接口：本轮只做切枪占位（弹丸颜色区分），
+  // 射速 / 弹速 / 后坐力差异留到阶段四实现。
+  WEAPONS: [
+    { id: 'pistol', name: '手枪', color: '#ffe066' },
+    { id: 'rifle', name: '步枪', color: '#5fe6ff' },
+  ],
 };
 
 // 关卡元信息（用于选关界面），真正的关卡布局在 src/data/levels.json

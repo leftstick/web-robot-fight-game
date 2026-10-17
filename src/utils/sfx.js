@@ -101,4 +101,8 @@ export class Sfx {
   hurt() {
     this._tone({ freq: 220, slideTo: 80, type: 'sawtooth', dur: 0.28, vol: 0.28 });
   }
+
+  click() {
+    this._tone({ freq: 520, slideTo: 780, type: 'square', dur: 0.06, vol: 0.14 });
+  }
 }

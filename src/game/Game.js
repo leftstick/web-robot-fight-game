@@ -72,7 +72,7 @@ export class Game {
   }
 
   init() {
-    this.input.setCanvas(this.canvas);
+    this.input.bindTouchControls(document.getElementById('touchControls'));
     this.loadPromise = loadLevels();
     this.loadPromise.then((data) => {
       this.levels = data;
@@ -187,31 +187,34 @@ export class Game {
   }
 
   updatePlaying(dtf) {
-    if (this.input.isPauseJustPressed()) {
+    // 统一输入：每帧轮询，游戏逻辑只读抽象信号（不区分键盘/触屏/手柄）
+    const input = this.input.poll();
+
+    if (input.pause) {
       this.pause();
       return;
     }
 
     const p = this.player;
 
-    // 输入
-    p.moveLeft = this.input.isLeft();
-    p.moveRight = this.input.isRight();
-    p.setCrouch(this.input.isCrouch() && p.onGround);
+    p.moveLeft = input.moveLeft;
+    p.moveRight = input.moveRight;
+    p.aiming = input.aim;
+    p.setCrouch(input.crouch && p.onGround);
 
-    if (this.input.consumeJump()) {
-      if (p.jump()) this.sfx.jump();
-    }
+    if (input.jump && p.jump()) this.sfx.jump();
 
-    if (this.input.isFire() && p.tryFire(this.currentTime)) {
+    if (input.shoot && p.tryFire(this.currentTime)) {
       this.bullets.push(p.createBullet());
       this.sfx.shoot();
     }
 
-    if (this.input.consumeGrenade() && p.tryGrenade(this.currentTime)) {
+    if (input.grenade && p.tryGrenade(this.currentTime)) {
       this.grenades.push(p.createGrenade());
       this.sfx.throwGrenade();
     }
+
+    if (input.switchWeapon) this.switchWeapon();
 
     p.update(dtf, this.world);
 
@@ -221,8 +224,14 @@ export class Game {
     this.updateGrenades(dtf);
     this.spawnBoss();
     this.checkGameState();
+  }
 
-    this.input.clearJustPressed();
+  // 切换武器槽（本轮仅占位：切换弹丸颜色与 HUD 名称；射速/弹速差异留到阶段四）
+  switchWeapon() {
+    if (!this.player) return;
+    const total = GameConfig.WEAPONS.length;
+    this.player.weaponIndex = (this.player.weaponIndex + 1) % total;
+    this.sfx.click();
   }
 
   updateCamera() {
@@ -550,6 +559,11 @@ export class Game {
     ctx.fillStyle = '#ffffff';
     ctx.font = '11px monospace';
     ctx.fillText('手雷 [G]', 16, this.height - 34);
+
+    // 当前武器槽
+    ctx.fillStyle = this.player.getWeapon().color;
+    ctx.font = '12px monospace';
+    ctx.fillText(`武器 [L] ${this.player.getWeapon().name}`, 16, this.height - 50);
   }
 
   destroy() {

@@ -28,6 +28,8 @@ export class Player {
     this.moveLeft = false;
     this.moveRight = false;
     this.wantJump = false;
+    this.aiming = false;        // LT 举枪瞄准（移动减速）
+    this.weaponIndex = 0;       // 当前武器槽（切枪占位）
 
     this.lastFire = -9999;
     this.lastGrenade = -9999;
@@ -54,6 +56,8 @@ export class Player {
     this.moveLeft = false;
     this.moveRight = false;
     this.wantJump = false;
+    this.aiming = false;
+    this.weaponIndex = 0;
     this.lastFire = -9999;
     this.lastGrenade = -9999;
     this.isInvincible = false;
@@ -98,7 +102,8 @@ export class Player {
     if (this.moveLeft) move -= 1;
     if (this.moveRight) move += 1;
 
-    const speed = P.speed * (this.onGround ? 1 : P.airControl);
+    let speed = P.speed * (this.onGround ? 1 : P.airControl);
+    if (this.aiming) speed *= 0.5;   // 举枪瞄准：移动减速
     this.vx = move * speed;
 
     if (move !== 0) this.facing = move > 0 ? 1 : -1;
@@ -173,6 +178,11 @@ export class Player {
     return 12;
   }
 
+  getWeapon() {
+    const list = GameConfig.WEAPONS;
+    return list[this.weaponIndex % list.length];
+  }
+
   createBullet() {
     const gy = this.y + this.getGunHeight();
     const x = this.facing > 0
@@ -182,7 +192,7 @@ export class Player {
       width: P.bulletWidth,
       height: P.bulletHeight,
       damage: P.bulletDamage,
-      color: GameConfig.COLORS.playerBullet,
+      color: this.getWeapon().color,
       owner: BulletOwner.PLAYER,
     });
   }

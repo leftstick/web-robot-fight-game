@@ -101,6 +101,93 @@ body::before {
   touch-action: none;
 }
 
+/* 手机虚拟按键层：默认隐藏，触屏设备（或 ?touch=1）启用 */
+.touch-controls {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+}
+
+.touch-controls.enabled {
+  display: block;
+}
+
+.tc-btn {
+  position: absolute;
+  pointer-events: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.10);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.08s ease, opacity 0.08s ease, transform 0.08s ease;
+}
+
+/* 按下态视觉反馈 */
+.tc-btn.active {
+  background: rgba(0, 229, 255, 0.45);
+  border-color: rgba(0, 229, 255, 0.95);
+  color: #ffffff;
+  transform: scale(0.94);
+}
+
+/* 左侧方向键：大按钮 ≥ 80×80 */
+.tc-move {
+  width: 80px;
+  height: 80px;
+  font-size: 22px;
+}
+
+.tc-small {
+  width: 54px;
+  height: 54px;
+  font-size: 16px;
+}
+
+/* 右侧动作键 */
+.tc-shoot {
+  width: 92px;
+  height: 92px;
+  font-size: 15px;
+  background: rgba(255, 71, 87, 0.18);
+  border-color: rgba(255, 71, 87, 0.55);
+}
+
+.tc-jump {
+  width: 76px;
+  height: 76px;
+  font-size: 18px;
+}
+
+.tc-crouch {
+  width: 64px;
+  height: 64px;
+  font-size: 15px;
+}
+
+.tc-switch {
+  width: 48px;
+  height: 48px;
+  font-size: 12px;
+  background: rgba(57, 255, 136, 0.14);
+  border-color: rgba(57, 255, 136, 0.5);
+}
+
 /* 横屏提示 */
 .rotate-tip {
   display: none;
