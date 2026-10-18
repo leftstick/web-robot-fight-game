@@ -65,6 +65,32 @@ export class InputManager {
     };
 
     this.initKeyboard();
+    this.initGamepadEvents();
+  }
+
+  // —— 手柄连接/断开事件（比纯轮询更可靠：浏览器在按键后才会触发 gamepadconnected）——
+  initGamepadEvents() {
+    if (typeof window === 'undefined') return;
+    window.addEventListener('gamepadconnected', (e) => {
+      this._padWasConnected = false;   // 强制下次 poll 触发 onPadChange
+      this.padConnected = true;
+      if (this.onPadChange) this.onPadChange(true, (e.gamepad && e.gamepad.id) || '');
+    });
+    window.addEventListener('gamepaddisconnected', (e) => {
+      this._padWasConnected = false;
+      this.padConnected = false;
+      if (this.onPadChange) this.onPadChange(false, (e.gamepad && e.gamepad.id) || '');
+    });
+  }
+
+  // 当前页面是否满足手柄 API 的安全上下文要求
+  isSecureContext() {
+    return typeof window !== 'undefined' && window.isSecureContext === true;
+  }
+
+  // 浏览器是否支持 Gamepad API
+  isGamepadApiSupported() {
+    return typeof navigator !== 'undefined' && typeof navigator.getGamepads === 'function';
   }
 
   // 是否启用触屏层（支持 ?touch=1 强制开启，便于桌面调试）

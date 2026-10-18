@@ -26,6 +26,8 @@ class GameApp {
     // 手柄 UI：连接/断开提示 + 按键图例
     this.gpLegend = document.getElementById('gpLegend');
     this.gpToast = document.getElementById('gpToast');
+    this.gpWarn = document.getElementById('gpWarn');     // 非安全上下文警告
+    this.gpPending = document.getElementById('gpPending'); // 待激活提示
     this.toastTimer = null;
 
     // 菜单导航：当前屏幕的可选项、选中下标（键盘/手柄共用同一套）
@@ -42,6 +44,7 @@ class GameApp {
     this.setupEventListeners();
     this.setupDeviceSpecific();
     this.renderLevelGrid();
+    this.checkGamepadAvailability();
     // 显示加载画面，素材加载完成后显示开始界面
     this.showScreen('start');
     this.game.init();
@@ -97,12 +100,37 @@ class GameApp {
 
   onPadChange(connected, id) {
     if (this.gpLegend) this.gpLegend.style.display = connected ? 'flex' : 'none';
+    // 连接成功后隐藏"待激活"提示；断开时重新显示（API 仍可用）
+    if (this.gpPending) this.gpPending.style.display = connected ? 'none' : 'flex';
     if (connected) {
       const name = (id || '').split(' ')[0] || '手柄';
       this.showPadToast(`🎮 ${name} 已连接`);
     } else {
       this.showPadToast('手柄已断开');
     }
+  }
+
+  // 手柄 API 仅在安全上下文（HTTPS / localhost）可用；非安全上下文下提示用户
+  checkGamepadAvailability() {
+    const input = this.game.input;
+    const secure = input.isSecureContext && input.isSecureContext();
+    const apiSupported = input.isGamepadApiSupported();
+
+    if (!apiSupported) {
+      // 浏览器完全不支持 Gamepad API
+      this.showPadToast('⚠ 当前浏览器不支持手柄');
+      return;
+    }
+
+    if (!secure) {
+      // 非安全上下文：Gamepad API 存在但不会返回真实手柄
+      if (this.gpWarn) this.gpWarn.style.display = 'block';
+      if (this.gpPending) this.gpPending.style.display = 'none';
+      return;
+    }
+
+    // 安全上下文：API 可用，提示用户按任意键激活手柄
+    if (this.gpPending) this.gpPending.style.display = 'flex';
   }
 
   showPadToast(msg) {

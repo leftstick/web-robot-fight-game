@@ -546,6 +546,57 @@ body::before {
   opacity: 1;
 }
 
+/* 非安全上下文警告（持续显示，不自动消失） */
+.gp-warn {
+  display: none;
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(80, 12, 12, 0.92);
+  border: 1px solid rgba(255, 71, 87, 0.7);
+  color: #ff8a93;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-align: center;
+  line-height: 1.6;
+  z-index: 35;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.gp-warn b {
+  color: #ff4757;
+  font-weight: 900;
+}
+
+/* 手柄待激活提示（API 可用但尚未检测到按键） */
+.gp-pending {
+  display: none;
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 22, 40, 0.85);
+  border: 1px solid rgba(57, 255, 136, 0.5);
+  color: #39ff88;
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  letter-spacing: 1px;
+  z-index: 25;
+  pointer-events: none;
+  white-space: nowrap;
+  animation: gp-pending-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes gp-pending-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
 /* 关卡选择 */
 .level-grid {
   display: grid;

@@ -45,6 +45,17 @@
 
       <!-- 手柄连接/断开提示 -->
       <div id="gpToast" class="gp-toast"></div>
+
+      <!-- 非安全上下文警告：Gamepad API 仅在 HTTPS / localhost 下可用 -->
+      <div id="gpWarn" class="gp-warn">
+        ⚠ 当前为非安全上下文（HTTP 或本地文件），手柄不可用。<br>
+        请通过 <b>localhost</b> 或 <b>HTTPS</b> 打开本页面。
+      </div>
+
+      <!-- 手柄待激活提示：检测到 API 但尚未收到按键信号 -->
+      <div id="gpPending" class="gp-pending">
+        🎮 请按手柄任意键以激活…
+      </div>
       
       <!-- 开始界面 -->
       <div id="startScreen" class="screen active">
