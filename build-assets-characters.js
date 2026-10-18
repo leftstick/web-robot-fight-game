@@ -68,24 +68,82 @@ function makeAsepriteJSON(frameW, frameH, frames, metaTags) {
 // ============================================================
 const PBC = 16;
 
+// —— 通用侧脸（朝右 / +x）：后脑在左，鼻尖在右，单只可见眼睛 ——
+// 占位 10 列（cx-5..cx+4）× 10 行（y..y+9）
+function drawSideHead(ctx, cx, y, o) {
+  const K = PAL.K;
+  const skin = o.skin || PAL.b, skinHi = o.skinHi || PAL.c, skinSh = o.skinSh || PAL.a;
+  const hair = o.hair, hairHi = o.hairHi;
+  const hairline = cx - 1;      // 发际线：其左为后脑头发，其右为面部
+
+  // 1px 描边轮廓（逐行 span）：圆颅 + 前突鼻尖
+  const outline = [
+    [0, cx - 4, 6], [1, cx - 5, 8], [2, cx - 5, 9], [3, cx - 5, 9],
+    [4, cx - 5, 10], [5, cx - 5, 9], [6, cx - 5, 9],
+    [7, cx - 4, 7], [8, cx - 4, 7], [9, cx - 3, 5],
+  ];
+  for (const [r, sx, w] of outline) px(ctx, sx, y + r, w, 1, K);
+
+  // 逐行填充：后脑头发 + 面部（去掉 1px 描边）
+  const fillRow = (r, sx, w) => {
+    const ix = sx + 1, iw = w - 2;
+    if (iw <= 0) return;
+    if (hair) {                                   // 后脑头发
+      const hw = Math.max(0, Math.min(iw, hairline - ix));
+      if (hw > 0) {
+        px(ctx, ix, y + r, hw, 1, hair);
+        if (hairHi) px(ctx, ix, y + r, 1, 1, hairHi);   // 后脑高光
+      }
+    }
+    const fx = Math.max(ix, hairline);            // 面部
+    const fw = (hair && r < 2) ? 0 : (ix + iw - fx); // 头顶两行整行是头发
+    if (fw > 0) px(ctx, fx, y + r, fw, 1, skin);
+  };
+  fillRow(1, cx - 4, 8); fillRow(2, cx - 4, 9); fillRow(3, cx - 4, 9);
+  fillRow(5, cx - 4, 9); fillRow(6, cx - 4, 9); fillRow(7, cx - 3, 7); fillRow(8, cx - 3, 7);
+
+  // 鼻梁行（r=4）：额外前突，整行高光
+  px(ctx, cx - 4, y + 4, hair ? Math.max(0, hairline - (cx - 4)) : 0, 1, hair);
+  px(ctx, Math.max(cx - 4, hairline), y + 4, (cx + 3) - Math.max(cx - 4, hairline), 1, skinHi);
+  px(ctx, cx + 3, y + 4, 1, 1, skinHi);
+  // 下巴阴影
+  px(ctx, cx - 2, y + 9, 3, 1, skinSh);
+  // 顶发高光 / 后脑弧高光
+  if (hair) {
+    px(ctx, cx - 3, y + 1, 4, 1, hairHi || hair);
+    px(ctx, cx - 4, y + 2, 1, 5, hairHi || hair);
+  }
+
+  // —— 眼部 / 护目镜 / 面罩 ——
+  if (o.style === 'mask') {
+    for (let r = 2; r <= 6; r++) px(ctx, cx - 1, y + r, 4, 1, o.mask);
+    px(ctx, cx - 1, y + 2, 4, 1, o.maskHi || '#f0f0f8');
+    px(ctx, cx - 1, y + 6, 4, 1, o.maskSh || '#a0a0b0');
+    px(ctx, cx + 1, y + 4, 1, 1, K);              // 单眼孔
+    px(ctx, cx - 2, y + 5, 1, 1, '#9090a0');      // 呼吸阀
+  } else if (o.visor) {
+    px(ctx, cx - 1, y + 3, 4, 2, o.visor);        // 单片护目镜横带
+    px(ctx, cx + 2, y + 3, 1, 1, '#ffffff');      // 高光
+    px(ctx, cx - 1, y + 4, 1, 1, o.visorLo || o.visor);
+  } else {
+    px(ctx, cx + 1, y + 3, 1, 2, K);              // 单眼
+    px(ctx, cx + 1, y + 3, 1, 1, o.eyeGlow || PAL.u);
+    px(ctx, cx - 1, y + 2, 2, 1, skinSh);         // 眉
+  }
+
+  // 莫西干发型
+  if (o.style === 'mohawk' && hair) {
+    px(ctx, cx - 2, y - 1, 2, 2, o.mohawk || '#a8243a');
+    px(ctx, cx - 1, y - 2, 2, 1, o.mohawkHi || '#ff4757');
+    px(ctx, cx - 2, y, 2, 1, PAL.d);
+  }
+  if (o.hurt) px(ctx, cx - 1, y + 2, 4, 4, PAL.w);
+}
+
 function drawPlayerHead(ctx, cx, y, hurt) {
-  px(ctx, cx - 4, y, 8, 8, PAL.K);
-  px(ctx, cx - 3, y + 1, 6, 6, PAL.b);
-  px(ctx, cx - 3, y + 1, 1, 6, PAL.a);
-  px(ctx, cx + 2, y + 1, 1, 6, PAL.a);
-  px(ctx, cx - 2, y + 2, 4, 1, PAL.c);
-  px(ctx, cx - 3, y + 3, 6, 2, PAL.K);
-  px(ctx, cx - 2, y + 3, 2, 1, PAL.u);
-  px(ctx, cx + 1, y + 3, 2, 1, PAL.t);
-  px(ctx, cx - 3, y + 3, 1, 2, PAL.K);
-  px(ctx, cx - 4, y, 8, 2, PAL.d);
-  px(ctx, cx - 4, y + 1, 8, 1, PAL.e);
-  px(ctx, cx - 4, y + 2, 1, 3, PAL.d);
-  px(ctx, cx + 3, y + 2, 1, 3, PAL.d);
-  px(ctx, cx - 4, y + 5, 1, 2, PAL.d);
-  px(ctx, cx + 3, y + 5, 1, 2, PAL.d);
-  px(ctx, cx - 1, y + 6, 2, 1, PAL.a);
-  if (hurt) px(ctx, cx - 3, y + 3, 6, 2, PAL.w);
+  drawSideHead(ctx, cx, y, {
+    hair: PAL.d, hairHi: PAL.e, visor: PAL.t, visorLo: PAL.t, eyeGlow: PAL.u, hurt,
+  });
 }
 
 function drawPlayer(ctx, spec) {
@@ -98,120 +156,123 @@ function drawPlayer(ctx, spec) {
   if (spec.pose === 'jump') { drawPlayerJump(ctx, spec.phase, oy); return; }
   const legPhase = spec.legPhase || 0;
   const shooting = spec.pose === 'shoot';
-  drawPlayerHead(ctx, PBC, 3 + oy, hurt);
-  px(ctx, PBC - 2, 11 + oy, 4, 2, PAL.b);
-  px(ctx, PBC - 2, 11 + oy, 1, 2, PAL.a);
-  px(ctx, PBC - 7, 13 + oy, 14, 10, PAL.K);
-  px(ctx, PBC - 6, 13 + oy, 12, 9, PAL.g);
-  px(ctx, PBC - 6, 13 + oy, 12, 1, PAL.h);
-  px(ctx, PBC - 6, 21 + oy, 12, 1, PAL.f);
-  px(ctx, PBC - 6, 13 + oy, 12, 1, PAL.i);
-  px(ctx, PBC - 1, 13 + oy, 1, 9, PAL.i);
-  px(ctx, PBC + 5, 13 + oy, 1, 9, PAL.i);
-  px(ctx, PBC - 4, 15 + oy, 8, 5, PAL.k);
-  px(ctx, PBC - 4, 15 + oy, 8, 1, PAL.j);
-  px(ctx, PBC - 3, 16 + oy, 1, 3, PAL.j);
-  px(ctx, PBC + 2, 16 + oy, 1, 3, PAL.j);
-  px(ctx, PBC - 7, 22 + oy, 14, 2, PAL.K);
-  px(ctx, PBC - 6, 22 + oy, 12, 1, PAL.n);
-  px(ctx, PBC - 1, 22 + oy, 2, 2, PAL.x);
-  rimLight(ctx, PBC - 7, 13 + oy, 14, 9, PAL.t, true);
-  rimLight(ctx, PBC - 7, 13 + oy, 14, 9, PAL.u, false);
+
+  drawPlayerHead(ctx, PBC, 2 + oy, hurt);
+  // 脖子（前倾）
+  px(ctx, PBC - 1, 12 + oy, 3, 2, PAL.K);
+  px(ctx, PBC, 12 + oy, 2, 2, PAL.b);
+
+  // 躯干（侧视：胸口挺向 +x）
+  px(ctx, PBC - 5, 13 + oy, 10, 11, PAL.K);    // 轮廓 x: PBC-5..PBC+4
+  px(ctx, PBC - 4, 13 + oy, 9, 10, PAL.g);     // 机甲填充
+  px(ctx, PBC - 4, 13 + oy, 9, 1, PAL.h);      // 顶部
+  px(ctx, PBC - 4, 13 + oy, 1, 10, PAL.h);     // 背侧（-x）高光
+  px(ctx, PBC + 3, 13 + oy, 2, 10, PAL.f);     // 前侧（+x）阴影
+  px(ctx, PBC + 4, 13 + oy, 1, 10, PAL.i);     // 胸前霓虹描边（朝前）
+  // 胸前霓虹条
+  px(ctx, PBC - 2, 15 + oy, 6, 1, PAL.i);
+  px(ctx, PBC - 1, 19 + oy, 5, 1, PAL.t);
+  // 背部装置（背包/推进器）
+  px(ctx, PBC - 7, 14 + oy, 3, 8, PAL.K);
+  px(ctx, PBC - 6, 15 + oy, 1, 6, PAL.e);
+  px(ctx, PBC - 6, 20 + oy, 1, 2, PAL.i);
+  // 腰带
+  px(ctx, PBC - 5, 23 + oy, 10, 1, PAL.K);
+  px(ctx, PBC - 4, 23 + oy, 9, 1, PAL.n);
+  // 边缘光（霓虹描边）
+  rimLight(ctx, PBC - 5, 13 + oy, 10, 10, PAL.t, true);
   drawPlayerLegs(ctx, legPhase, oy, shooting);
   drawPlayerArms(ctx, shooting, flash, oy, hurt);
 }
 
 function drawPlayerLegs(ctx, phase, oy, shooting) {
   const baseY = 24 + oy;
-  const swing = Math.sin(phase * Math.PI / 4) * 2;
+  const swing = Math.sin(phase * Math.PI / 4) * 2;      // 前后摆动
   const lift = Math.max(0, Math.sin(phase * Math.PI / 4)) * 1;
-  px(ctx, PBC - 5, baseY - lift, 4, 5 + lift, PAL.K);
-  px(ctx, PBC - 4, baseY - lift, 2, 4 + lift, PAL.m);
-  px(ctx, PBC - 4, baseY - lift, 1, 4 + lift, PAL.l);
-  px(ctx, PBC - 5, baseY + 4, 4, 2, PAL.K);
-  px(ctx, PBC - 4, baseY + 4, 3, 1, PAL.o);
-  px(ctx, PBC + 1 + swing, baseY, 4, 5, PAL.K);
-  px(ctx, PBC + 2 + swing, baseY, 2, 4, PAL.m);
-  px(ctx, PBC + 2 + swing, baseY, 1, 4, PAL.l);
+  // 后腿（-x 侧）
+  px(ctx, PBC - 4 - swing, baseY - lift, 4, 5 + lift, PAL.K);
+  px(ctx, PBC - 3 - swing, baseY - lift, 2, 4 + lift, PAL.m);
+  px(ctx, PBC - 4 - swing, baseY + 4, 4, 2, PAL.K);
+  px(ctx, PBC - 5 - swing, baseY + 4, 5, 1, PAL.o);
+  // 前腿（+x 侧）
+  px(ctx, PBC + 1 + swing, baseY - lift, 4, 5 + lift, PAL.K);
+  px(ctx, PBC + 2 + swing, baseY - lift, 2, 4 + lift, PAL.m);
   px(ctx, PBC + 1 + swing, baseY + 4, 4, 2, PAL.K);
-  px(ctx, PBC + 2 + swing, baseY + 4, 3, 1, PAL.o);
+  px(ctx, PBC + 1 + swing, baseY + 4, 5, 1, PAL.o);
 }
 
 function drawPlayerArms(ctx, shooting, flash, oy, hurt) {
   const armY = 14 + oy;
   if (shooting) {
-    px(ctx, PBC - 6, armY, 3, 2, PAL.g);
-    px(ctx, PBC - 4, armY, 4, 2, PAL.b);
-    px(ctx, PBC + 2, armY, 3, 2, PAL.g);
-    px(ctx, PBC + 4, armY, 4, 2, PAL.b);
-    px(ctx, PBC + 7, armY - 1, 6, 4, PAL.K);
-    px(ctx, PBC + 8, armY, 4, 2, PAL.q);
-    px(ctx, PBC + 8, armY, 4, 1, PAL.x);
-    px(ctx, PBC + 7, armY + 1, 2, 2, PAL.p);
+    // 前臂前伸持枪
+    px(ctx, PBC + 3, armY + 1, 3, 3, PAL.K);
+    px(ctx, PBC + 3, armY + 2, 2, 1, PAL.g);
+    // 枪
+    px(ctx, PBC + 6, armY, 7, 4, PAL.K);
+    px(ctx, PBC + 7, armY + 1, 5, 2, PAL.q);
+    px(ctx, PBC + 7, armY + 1, 5, 1, PAL.x);
+    px(ctx, PBC + 6, armY + 3, 2, 2, PAL.p);
     if (flash) {
-      px(ctx, PBC + 13, armY - 1, 4, 5, PAL.r);
-      px(ctx, PBC + 13, armY, 3, 3, PAL.w);
+      px(ctx, PBC + 13, armY, 4, 5, PAL.r);
+      px(ctx, PBC + 13, armY + 1, 3, 3, PAL.w);
     }
   } else {
-    px(ctx, PBC - 7, armY, 2, 6, PAL.K);
-    px(ctx, PBC - 6, armY + 1, 1, 4, PAL.g);
-    px(ctx, PBC - 6, armY + 5, 2, 2, PAL.b);
-    px(ctx, PBC + 5, armY, 2, 6, PAL.K);
-    px(ctx, PBC + 5, armY + 1, 1, 4, PAL.g);
-    px(ctx, PBC + 5, armY + 5, 2, 2, PAL.b);
-    px(ctx, PBC + 6, armY + 4, 5, 3, PAL.K);
-    px(ctx, PBC + 7, armY + 5, 3, 1, PAL.q);
+    // 前臂自然下垂
+    px(ctx, PBC + 1, armY + 2, 3, 7, PAL.K);
+    px(ctx, PBC + 2, armY + 3, 1, 5, PAL.g);
+    px(ctx, PBC + 1, armY + 8, 3, 2, PAL.K);
+    px(ctx, PBC + 2, armY + 8, 2, 1, PAL.b);
   }
 }
 
 function drawPlayerCrouch(ctx, flash, oy) {
   const y = 10 + oy;
-  drawPlayerHead(ctx, PBC, y, 0);
-  px(ctx, PBC - 2, y + 8, 4, 1, PAL.b);
-  px(ctx, PBC - 7, y + 9, 14, 7, PAL.K);
-  px(ctx, PBC - 6, y + 9, 12, 6, PAL.g);
-  px(ctx, PBC - 6, y + 9, 12, 1, PAL.i);
-  px(ctx, PBC - 1, y + 9, 1, 6, PAL.i);
-  px(ctx, PBC - 4, y + 11, 8, 3, PAL.k);
-  px(ctx, PBC - 6, y + 16, 5, 4, PAL.K);
-  px(ctx, PBC - 5, y + 16, 3, 3, PAL.m);
-  px(ctx, PBC + 1, y + 16, 5, 4, PAL.K);
-  px(ctx, PBC + 2, y + 16, 3, 3, PAL.m);
-  px(ctx, PBC - 6, y + 19, 5, 2, PAL.K);
-  px(ctx, PBC + 1, y + 19, 5, 2, PAL.K);
-  px(ctx, PBC + 2, y + 10, 3, 2, PAL.g);
-  px(ctx, PBC + 4, y + 10, 4, 2, PAL.b);
-  px(ctx, PBC + 7, y + 9, 6, 4, PAL.K);
-  px(ctx, PBC + 8, y + 10, 4, 2, PAL.q);
+  drawPlayerHead(ctx, PBC, y - 1, 0);
+  // 躯干（蹲伏前倾）
+  px(ctx, PBC - 5, y + 9, 10, 7, PAL.K);
+  px(ctx, PBC - 4, y + 9, 9, 6, PAL.g);
+  px(ctx, PBC - 4, y + 9, 1, 6, PAL.h);
+  px(ctx, PBC + 4, y + 9, 1, 6, PAL.i);
+  px(ctx, PBC - 2, y + 11, 6, 1, PAL.i);
+  // 后腿（屈膝）
+  px(ctx, PBC - 5, y + 16, 5, 4, PAL.K);
+  px(ctx, PBC - 4, y + 16, 3, 3, PAL.m);
+  px(ctx, PBC - 5, y + 19, 5, 2, PAL.K);
+  // 前腿（前伸）
+  px(ctx, PBC + 1, y + 15, 6, 4, PAL.K);
+  px(ctx, PBC + 2, y + 15, 4, 3, PAL.m);
+  px(ctx, PBC + 2, y + 18, 5, 2, PAL.K);
+  // 持枪前臂
+  px(ctx, PBC + 6, y + 10, 7, 4, PAL.K);
+  px(ctx, PBC + 7, y + 11, 5, 2, PAL.q);
   if (flash) {
-    px(ctx, PBC + 13, y + 8, 4, 5, PAL.r);
-    px(ctx, PBC + 13, y + 9, 3, 3, PAL.w);
+    px(ctx, PBC + 13, y + 9, 4, 5, PAL.r);
+    px(ctx, PBC + 13, y + 10, 3, 3, PAL.w);
   }
 }
 
 function drawPlayerJump(ctx, phase, oy) {
   const y = 3 + oy;
-  drawPlayerHead(ctx, PBC, y, 0);
-  px(ctx, PBC - 2, y + 8, 4, 2, PAL.b);
+  drawPlayerHead(ctx, PBC, y - 1, 0);
+  px(ctx, PBC - 1, y + 9, 3, 2, PAL.K);
   const tuck = phase === 1 ? 1 : 0;
-  px(ctx, PBC - 7, y + 10, 14, 9, PAL.K);
-  px(ctx, PBC - 6, y + 10, 12, 8, PAL.g);
-  px(ctx, PBC - 6, y + 10, 12, 1, PAL.i);
-  px(ctx, PBC - 1, y + 10, 1, 8, PAL.i);
-  px(ctx, PBC - 4, y + 12, 8, 4, PAL.k);
-  px(ctx, PBC - 7, y + 18, 14, 2, PAL.K);
-  px(ctx, PBC - 6, y + 18, 12, 1, PAL.n);
-  const legY = y + 20 + tuck;
-  px(ctx, PBC - 5, legY, 4, 3 + tuck, PAL.K);
-  px(ctx, PBC - 4, legY, 2, 2 + tuck, PAL.m);
-  px(ctx, PBC + 1, legY, 4, 3 + tuck, PAL.K);
-  px(ctx, PBC + 2, legY, 2, 2 + tuck, PAL.m);
-  px(ctx, PBC - 5, legY + 3, 4, 2, PAL.K);
-  px(ctx, PBC + 1, legY + 3, 4, 2, PAL.K);
-  px(ctx, PBC - 8, y + 10, 2, 4, PAL.K);
-  px(ctx, PBC - 7, y + 11, 1, 2, PAL.g);
-  px(ctx, PBC + 6, y + 10, 2, 4, PAL.K);
-  px(ctx, PBC + 6, y + 11, 1, 2, PAL.g);
+  // 躯干
+  px(ctx, PBC - 5, y + 10, 10, 9, PAL.K);
+  px(ctx, PBC - 4, y + 10, 9, 8, PAL.g);
+  px(ctx, PBC - 4, y + 10, 1, 8, PAL.h);
+  px(ctx, PBC + 4, y + 10, 1, 8, PAL.i);
+  px(ctx, PBC - 2, y + 12, 6, 1, PAL.i);
+  // 腿部（腾空收起）
+  const legY = y + 19 + tuck;
+  px(ctx, PBC - 4, legY, 4, 4 - tuck, PAL.K);
+  px(ctx, PBC - 3, legY, 2, 3 - tuck, PAL.m);
+  px(ctx, PBC - 5, legY + 2 - tuck, 4, 2, PAL.K);
+  px(ctx, PBC + 1, legY, 5, 4 - tuck, PAL.K);
+  px(ctx, PBC + 2, legY, 3, 3 - tuck, PAL.m);
+  px(ctx, PBC + 2, legY + 2 - tuck, 5, 2, PAL.K);
+  // 前臂
+  px(ctx, PBC + 1, y + 11, 3, 6, PAL.K);
+  px(ctx, PBC + 2, y + 12, 1, 4, PAL.g);
 }
 
 function drawPlayerDeath(ctx, phase) {
@@ -263,34 +324,15 @@ const THUG_VARIANTS = {
 };
 
 function drawThugHead(ctx, cx, y, variant, hurt) {
-  px(ctx, cx - 4, y, 8, 8, PAL.K);
-  px(ctx, cx - 3, y + 1, 6, 6, PAL.b);
-  px(ctx, cx - 3, y + 1, 1, 6, PAL.a);
-  if (variant.mask) {
-    px(ctx, cx - 3, y + 2, 6, 5, variant.mask);
-    px(ctx, cx - 3, y + 2, 6, 1, '#f0f0f8');
-    px(ctx, cx - 2, y + 4, 1, 1, PAL.K);
-    px(ctx, cx + 1, y + 4, 1, 1, PAL.K);
-    px(ctx, cx - 1, y + 6, 2, 1, PAL.K);
-    px(ctx, cx - 3, y + 3, 1, 1, '#a0a0b0');
-  } else if (variant.weapon === 'bat') {
-    px(ctx, cx - 3, y + 1, 6, 2, PAL.b);
-    px(ctx, cx - 2, y + 3, 1, 1, PAL.K);
-    px(ctx, cx + 1, y + 3, 1, 1, PAL.K);
-    px(ctx, cx - 1, y + 5, 3, 1, PAL.a);
-    px(ctx, cx - 3, y + 6, 6, 1, PAL.a);
-  } else {
-    px(ctx, cx - 2, y + 3, 1, 1, PAL.K);
-    px(ctx, cx + 1, y + 3, 1, 1, PAL.K);
-    px(ctx, cx - 1, y + 5, 2, 1, PAL.a);
-  }
-  if (variant.weapon === 'smg') {
-    px(ctx, cx - 1, y - 2, 2, 3, variant.hairHi);
-    px(ctx, cx - 1, y, 2, 1, variant.hairHi);
-    px(ctx, cx - 4, y, 8, 1, PAL.d);
-    px(ctx, cx - 4, y + 1, 1, 2, PAL.d);
-    px(ctx, cx + 3, y + 1, 1, 2, PAL.d);
-  }
+  const opts = { skin: PAL.b, skinHi: PAL.c, skinSh: PAL.a, hurt };
+  if (variant.mask) {                                  // 面罩
+    opts.style = 'mask'; opts.mask = variant.mask;
+    opts.hair = '#2a2a3a'; opts.hairHi = '#3a3a4a';
+  } else if (variant.weapon === 'smg') {               // 莫西干
+    opts.style = 'mohawk'; opts.hair = PAL.d; opts.hairHi = '#3a2030';
+    opts.mohawk = variant.hairHi; opts.mohawkHi = variant.trim;
+  }                                                    // 秃头：无头发
+  drawSideHead(ctx, cx, y, opts);
 }
 
 function drawThugArms(ctx, variant, shooting, aiming, flash, oy) {
@@ -332,18 +374,21 @@ function drawThugArms(ctx, variant, shooting, aiming, flash, oy) {
 
 function drawThugCrouch(ctx, variant, oy) {
   const y = 10 + oy;
-  drawThugHead(ctx, PBC, y, variant, 0);
-  px(ctx, PBC - 2, y + 8, 4, 1, PAL.b);
-  px(ctx, PBC - 7, y + 9, 14, 7, PAL.K);
-  px(ctx, PBC - 6, y + 9, 12, 6, variant.jacket);
-  px(ctx, PBC - 6, y + 9, 12, 1, variant.trim);
-  px(ctx, PBC - 1, y + 9, 1, 6, variant.trim);
-  px(ctx, PBC - 6, y + 16, 5, 4, PAL.K);
-  px(ctx, PBC - 5, y + 16, 3, 3, PAL.l);
-  px(ctx, PBC + 1, y + 16, 5, 4, PAL.K);
-  px(ctx, PBC + 2, y + 16, 3, 3, PAL.l);
-  px(ctx, PBC - 6, y + 19, 5, 2, PAL.K);
-  px(ctx, PBC + 1, y + 19, 5, 2, PAL.K);
+  drawThugHead(ctx, PBC, y - 1, variant, 0);
+  // 躯干（侧视蹲伏）
+  px(ctx, PBC - 5, y + 9, 10, 7, PAL.K);
+  px(ctx, PBC - 4, y + 9, 9, 6, variant.jacket);
+  px(ctx, PBC - 4, y + 9, 1, 6, PAL.n);
+  px(ctx, PBC + 4, y + 9, 1, 6, variant.trim);
+  px(ctx, PBC - 3, y + 11, 8, 1, variant.trim);
+  // 后腿（屈膝）
+  px(ctx, PBC - 5, y + 16, 5, 4, PAL.K);
+  px(ctx, PBC - 4, y + 16, 3, 3, PAL.l);
+  px(ctx, PBC - 5, y + 19, 5, 2, PAL.K);
+  // 前腿（前伸）
+  px(ctx, PBC + 1, y + 15, 6, 4, PAL.K);
+  px(ctx, PBC + 2, y + 15, 4, 3, PAL.l);
+  px(ctx, PBC + 2, y + 18, 5, 2, PAL.K);
 }
 
 function drawThugDeath(ctx, phase, variant) {
@@ -374,33 +419,36 @@ function drawThug(ctx, spec) {
   if (spec.pose === 'crouch') { drawThugCrouch(ctx, variant, oy); return; }
   const shooting = spec.pose === 'shoot';
   const aiming = spec.pose === 'aim';
-  drawThugHead(ctx, PBC, 3 + oy, variant, spec.pose === 'hurt');
-  px(ctx, PBC - 2, 11 + oy, 4, 2, variant.hair);
-  px(ctx, PBC - 7, 13 + oy, 14, 10, PAL.K);
-  px(ctx, PBC - 6, 13 + oy, 12, 9, variant.jacket);
-  px(ctx, PBC - 6, 13 + oy, 12, 1, variant.jacketHi);
-  px(ctx, PBC - 6, 21 + oy, 12, 1, PAL.K);
-  px(ctx, PBC - 6, 13 + oy, 12, 1, variant.trim);
-  px(ctx, PBC - 1, 13 + oy, 1, 9, variant.trim);
-  px(ctx, PBC - 6, 13 + oy, 2, 1, PAL.x);
-  px(ctx, PBC + 4, 13 + oy, 2, 1, PAL.x);
+  drawThugHead(ctx, PBC, 2 + oy, variant, spec.pose === 'hurt');
+  // 脖子
+  px(ctx, PBC - 1, 12 + oy, 3, 1, variant.hair || PAL.b);
+  // 躯干（侧视：略窄，胸口朝 +x）
+  px(ctx, PBC - 5, 13 + oy, 10, 10, PAL.K);        // 轮廓 x: PBC-5..PBC+4
+  px(ctx, PBC - 4, 13 + oy, 9, 9, variant.jacket);  // 夹克填充
+  px(ctx, PBC - 4, 13 + oy, 9, 1, variant.jacketHi);// 肩部高光
+  px(ctx, PBC - 4, 13 + oy, 1, 9, PAL.n);           // 背侧阴影
+  px(ctx, PBC + 3, 13 + oy, 2, 9, variant.jacketHi);// 前侧亮面
+  px(ctx, PBC + 4, 13 + oy, 1, 9, variant.trim);    // 胸前霓虹描边
+  px(ctx, PBC - 3, 16 + oy, 8, 1, variant.trim);    // 胸前横带
   if (variant.chain) {
-    px(ctx, PBC - 3, 14 + oy, 6, 1, variant.chain);
-    px(ctx, PBC - 1, 15 + oy, 2, 2, variant.chain);
+    px(ctx, PBC - 2, 15 + oy, 5, 1, variant.chain);
+    px(ctx, PBC + 1, 16 + oy, 2, 2, variant.chain);
   }
-  px(ctx, PBC - 7, 22 + oy, 14, 2, PAL.K);
-  px(ctx, PBC - 6, 22 + oy, 12, 1, PAL.n);
-  rimLight(ctx, PBC - 7, 13 + oy, 14, 9, PAL.t, true);
+  // 腰带
+  px(ctx, PBC - 5, 22 + oy, 10, 2, PAL.K);
+  px(ctx, PBC - 4, 22 + oy, 9, 1, PAL.n);
+  rimLight(ctx, PBC - 5, 13 + oy, 10, 9, PAL.t, true);
+  // 腿（前后错开）
   const legPhase = spec.legPhase || 0;
   const swing = Math.sin(legPhase * Math.PI / 4) * 1.5;
-  px(ctx, PBC - 5, 24 + oy, 4, 5, PAL.K);
-  px(ctx, PBC - 4, 24 + oy, 2, 4, PAL.l);
-  px(ctx, PBC - 5, 28 + oy, 4, 2, PAL.K);
-  px(ctx, PBC - 4, 28 + oy, 3, 1, PAL.n);
+  px(ctx, PBC - 4 - swing, 24 + oy, 4, 5, PAL.K);
+  px(ctx, PBC - 3 - swing, 24 + oy, 2, 4, PAL.l);
+  px(ctx, PBC - 4 - swing, 28 + oy, 4, 2, PAL.K);
+  px(ctx, PBC - 4 - swing, 28 + oy, 3, 1, PAL.n);
   px(ctx, PBC + 1 + swing, 24 + oy, 4, 5, PAL.K);
   px(ctx, PBC + 2 + swing, 24 + oy, 2, 4, PAL.l);
   px(ctx, PBC + 1 + swing, 28 + oy, 4, 2, PAL.K);
-  px(ctx, PBC + 2 + swing, 28 + oy, 3, 1, PAL.n);
+  px(ctx, PBC + 1 + swing, 28 + oy, 3, 1, PAL.n);
   drawThugArms(ctx, variant, shooting, aiming, spec.flash, oy);
 }
 
@@ -425,19 +473,9 @@ function buildThugSpecs(variant) {
 const BBC = 16;
 
 function drawBossHead(ctx, cx, y, hurt) {
-  px(ctx, cx - 5, y, 10, 9, PAL.K);
-  px(ctx, cx - 4, y + 1, 8, 7, PAL.b);
-  px(ctx, cx - 4, y + 1, 1, 7, PAL.a);
-  px(ctx, cx - 3, y + 2, 6, 1, PAL.c);
-  px(ctx, cx - 4, y + 3, 8, 2, PAL.K);
-  px(ctx, cx - 3, y + 3, 3, 1, '#b06bff');
-  px(ctx, cx + 1, y + 3, 3, 1, '#b06bff');
-  px(ctx, cx - 3, y + 4, 3, 1, '#d090ff');
-  px(ctx, cx + 1, y + 4, 3, 1, '#d090ff');
-  px(ctx, cx - 5, y, 10, 2, PAL.d);
-  px(ctx, cx - 5, y + 1, 10, 1, '#3a2848');
-  px(ctx, cx - 2, y + 6, 4, 1, PAL.a);
-  if (hurt) px(ctx, cx - 4, y + 3, 8, 2, PAL.w);
+  drawSideHead(ctx, cx, y, {
+    hair: '#2a1a3a', hairHi: '#43285f', skin: PAL.b, skinHi: PAL.c, visor: '#b06bff', hurt,
+  });
 }
 
 function drawBossMechArm(ctx, shooting, flash, oy, charging) {
@@ -493,36 +531,41 @@ function drawBoss(ctx, spec) {
   const oy = -bob;
   if (spec.pose === 'death') { drawBossDeath(ctx, spec.phase); return; }
   const shooting = spec.pose === 'gatling';
-  drawBossHead(ctx, BBC, 2 + oy, spec.pose === 'hurt');
-  px(ctx, BBC - 3, 10 + oy, 6, 3, PAL.a);
-  px(ctx, BBC - 3, 10 + oy, 1, 3, '#5a3a2a');
-  px(ctx, BBC - 9, 13 + oy, 18, 12, PAL.K);
-  px(ctx, BBC - 8, 13 + oy, 16, 11, '#43285f');
-  px(ctx, BBC - 8, 13 + oy, 16, 1, '#6a4a8f');
-  px(ctx, BBC - 8, 13 + oy, 16, 2, '#5a3a7f');
-  px(ctx, BBC - 8, 13 + oy, 1, 11, '#6a4a8f');
-  px(ctx, BBC + 7, 13 + oy, 1, 11, '#6a4a8f');
-  px(ctx, BBC - 8, 13 + oy, 16, 1, '#b06bff');
-  px(ctx, BBC - 1, 13 + oy, 1, 11, '#b06bff');
-  px(ctx, BBC - 9, 24 + oy, 18, 3, PAL.K);
-  px(ctx, BBC - 8, 24 + oy, 16, 2, '#1a1520');
+  drawBossHead(ctx, BBC, 1 + oy, spec.pose === 'hurt');
+  // 颈部（侧视）
+  px(ctx, BBC - 2, 11 + oy, 5, 2, PAL.a);
+  px(ctx, BBC - 2, 11 + oy, 1, 2, '#5a3a2a');
+  // 躯干（侧视：厚重，背甲在 -x，胸口朝 +x）
+  px(ctx, BBC - 7, 13 + oy, 13, 12, PAL.K);           // 轮廓 x: BBC-7..BBC+5
+  px(ctx, BBC - 6, 13 + oy, 11, 11, '#43285f');        // 填充
+  px(ctx, BBC - 6, 13 + oy, 11, 1, '#6a4a8f');         // 肩部高光
+  px(ctx, BBC - 6, 13 + oy, 1, 11, '#5a3a7f');         // 背侧阴影
+  px(ctx, BBC - 6, 15 + oy, 11, 1, '#5a3a7f');         // 背部横槽
+  px(ctx, BBC + 5, 13 + oy, 1, 11, '#6a4a8f');         // 前侧亮面
+  px(ctx, BBC - 4, 14 + oy, 9, 1, '#b06bff');          // 胸前霓虹
+  // 腰带
+  px(ctx, BBC - 7, 24 + oy, 13, 3, PAL.K);
+  px(ctx, BBC - 6, 24 + oy, 11, 2, '#1a1520');
   px(ctx, BBC - 1, 24 + oy, 2, 3, '#b06bff');
-  rimLight(ctx, BBC - 9, 13 + oy, 18, 11, PAL.t, true);
-  rimLight(ctx, BBC - 9, 13 + oy, 18, 11, '#b06bff', false);
+  // 边缘光
+  rimLight(ctx, BBC - 7, 13 + oy, 13, 11, PAL.t, true);
+  rimLight(ctx, BBC - 7, 13 + oy, 13, 11, '#b06bff', false);
+  // 腿（前后错开）
   const legPhase = spec.legPhase || 0;
   const swing = Math.sin(legPhase * Math.PI / 3) * 1;
-  px(ctx, BBC - 7, 27 + oy, 6, 5, PAL.K);
-  px(ctx, BBC - 6, 27 + oy, 4, 4, '#20202c');
-  px(ctx, BBC - 7, 31 + oy, 6, 2, PAL.K);
-  px(ctx, BBC - 6, 31 + oy, 5, 1, PAL.n);
-  px(ctx, BBC + 1 + swing, 27 + oy, 6, 5, PAL.K);
-  px(ctx, BBC + 2 + swing, 27 + oy, 4, 4, '#20202c');
-  px(ctx, BBC + 1 + swing, 31 + oy, 6, 2, PAL.K);
-  px(ctx, BBC + 2 + swing, 31 + oy, 5, 1, PAL.n);
-  px(ctx, BBC - 10, 14 + oy, 3, 8, PAL.K);
-  px(ctx, BBC - 9, 15 + oy, 2, 6, '#43285f');
-  px(ctx, BBC - 10, 21 + oy, 3, 2, PAL.K);
-  px(ctx, BBC - 9, 22 + oy, 2, 1, PAL.b);
+  px(ctx, BBC - 6, 26 + oy, 5, 5, PAL.K);
+  px(ctx, BBC - 5, 26 + oy, 3, 4, '#20202c');
+  px(ctx, BBC - 6, 30 + oy, 5, 2, PAL.K);
+  px(ctx, BBC - 5, 30 + oy, 4, 1, PAL.n);
+  px(ctx, BBC + 1 + swing, 26 + oy, 5, 5, PAL.K);
+  px(ctx, BBC + 2 + swing, 26 + oy, 3, 4, '#20202c');
+  px(ctx, BBC + 1 + swing, 30 + oy, 5, 2, PAL.K);
+  px(ctx, BBC + 2 + swing, 30 + oy, 4, 1, PAL.n);
+  // 背甲后臂（-x 侧）
+  px(ctx, BBC - 8, 14 + oy, 3, 8, PAL.K);
+  px(ctx, BBC - 7, 15 + oy, 2, 6, '#43285f');
+  px(ctx, BBC - 8, 21 + oy, 3, 2, PAL.K);
+  px(ctx, BBC - 7, 22 + oy, 2, 1, PAL.b);
   drawBossMechArm(ctx, shooting, spec.flash, oy, spec.pose === 'charge');
 }
 

@@ -17,18 +17,34 @@
     <div class="game-container">
       <canvas id="gameCanvas" width="960" height="540"></canvas>
 
-      <!-- 手机虚拟按键层（覆盖在 canvas 上方，仅触屏设备启用） -->
+      <!-- 手机虚拟摇杆 + 动作键层（覆盖在 canvas 上方，仅触屏设备启用） -->
       <div id="touchControls" class="touch-controls">
-        <div class="tc-btn tc-move"   data-action="left"   style="left:18px;bottom:34px;">◀</div>
-        <div class="tc-btn tc-move"   data-action="right"  style="left:112px;bottom:34px;">▶</div>
-        <div class="tc-btn tc-small"  data-action="jump"   style="left:120px;bottom:130px;">▲</div>
-        <div class="tc-btn tc-small"  data-action="crouch" style="left:26px;bottom:130px;">▼</div>
+        <!-- 左下角虚拟摇杆：左右移动，上推跳、下推蹲 -->
+        <div id="touchStick" class="tc-stick">
+          <div class="tc-stick-base">
+            <span class="tc-stick-mark m-up">▲</span>
+            <span class="tc-stick-mark m-down">▼</span>
+            <span class="tc-stick-mark m-left">◀</span>
+            <span class="tc-stick-mark m-right">▶</span>
+            <div class="tc-stick-knob"></div>
+          </div>
+        </div>
 
         <div class="tc-btn tc-shoot"  data-action="shoot"  style="right:132px;bottom:104px;">射击</div>
         <div class="tc-btn tc-jump"   data-action="jump"   style="right:22px;bottom:20px;">跳</div>
         <div class="tc-btn tc-crouch" data-action="crouch" style="right:132px;bottom:18px;">蹲</div>
         <div class="tc-btn tc-switch" data-action="switch" style="right:24px;bottom:150px;">切枪</div>
       </div>
+
+      <!-- 手柄按键图例（仅检测到手柄连接时显示） -->
+      <div id="gpLegend" class="gp-legend">
+        <span><b>A</b> 跳 · <b>X/RT</b> 射击 · <b>B</b> 蹲 · <b>Y/RB</b> 切枪</span>
+        <span><b>LT</b> 瞄准 · <b>LB</b> 手雷 · <b>Start</b> 暂停 · 摇杆/十字键 移动</span>
+        <span class="gp-legend-menu">菜单：<b>A</b> 确认 · <b>B</b> 返回</span>
+      </div>
+
+      <!-- 手柄连接/断开提示 -->
+      <div id="gpToast" class="gp-toast"></div>
       
       <!-- 开始界面 -->
       <div id="startScreen" class="screen active">
@@ -41,7 +57,9 @@
           <button class="btn btn-secondary" id="levelSelectBtn">选择关卡</button>
         </div>
         <div class="controls-hint">
-          <p id="controlsHint">键盘 ← → / AD 移动 | ↑ W K 跳跃 | ↓ S 蹲下 | 空格 J 射击 | L 切枪 ｜ 手柄 A跳 X射 RT射 Y/RB切枪 LT瞄准</p>
+          <p id="controlsHint">键盘：← → / AD 移动 · ↑ W K 跳 · ↓ S 蹲 · 空格 J 射击 · L 切枪 · G 手雷</p>
+          <p class="controls-pad-hint">手柄：摇杆/十字键 移动 · A 跳 · X/RT 射击 · B 蹲 · Y/RB 切枪 · LT 瞄准 · LB 手雷 · Start 暂停</p>
+          <p class="controls-hint-menu">菜单：方向键 / 摇杆选择 · A / 空格 / 回车 确认 · B / Backspace 返回</p>
         </div>
       </div>
       
@@ -85,6 +103,9 @@
           <button class="btn btn-secondary" id="restartBtn">重新开始</button>
           <button class="btn btn-back" id="quitBtn">退出游戏</button>
         </div>
+        <div class="menu-hint">
+          <p>方向键 / 摇杆 选择 | A / 空格 / 回车 确认 | B / Backspace 返回</p>
+        </div>
       </div>
       
       <!-- 结算界面 -->
@@ -110,7 +131,7 @@
           <button class="btn btn-back" id="menuBtn">返回主菜单</button>
         </div>
         <div class="menu-hint">
-          <p>↑↓ 选择 | 空格/回车 确认</p>
+          <p>方向键 / 摇杆 选择 | A / 空格 / 回车 确认 | B / Backspace 返回主菜单</p>
         </div>
       </div>
     </div>

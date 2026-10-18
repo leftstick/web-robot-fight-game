@@ -150,17 +150,85 @@ body::before {
   transform: scale(0.93);
 }
 
-/* 左侧方向键：大按钮 ≥ 80×80 */
-.tc-move {
-  width: 80px;
-  height: 80px;
-  font-size: 24px;
+/* 左侧虚拟摇杆：外圈触控区 + 底盘 + 摇杆头 */
+.tc-stick {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  width: 186px;
+  height: 186px;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.tc-small {
-  width: 54px;
-  height: 54px;
-  font-size: 16px;
+.tc-stick-base {
+  position: absolute;
+  inset: 24px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  background: radial-gradient(circle at 50% 45%,
+              rgba(255, 255, 255, 0.10) 0%,
+              rgba(255, 255, 255, 0.04) 55%,
+              rgba(255, 255, 255, 0.02) 100%);
+  box-shadow:
+    inset 0 0 22px rgba(0, 212, 255, 0.18),
+    0 0 14px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.tc-stick-mark {
+  position: absolute;
+  color: rgba(255, 255, 255, 0.30);
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
+  transition: color 0.12s ease;
+}
+
+.tc-stick-mark.m-up    { top: 8px;    left: 50%; transform: translateX(-50%); }
+.tc-stick-mark.m-down  { bottom: 8px; left: 50%; transform: translateX(-50%); }
+.tc-stick-mark.m-left  { left: 8px;   top: 50%;  transform: translateY(-50%); }
+.tc-stick-mark.m-right { right: 8px;  top: 50%;  transform: translateY(-50%); }
+
+.tc-stick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 50% 35%,
+              rgba(255, 255, 255, 0.32) 0%,
+              rgba(255, 255, 255, 0.14) 60%,
+              rgba(255, 255, 255, 0.08) 100%);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+/* 摇杆激活态：整体亮起 */
+.tc-stick.active .tc-stick-base {
+  border-color: rgba(0, 229, 255, 0.85);
+  box-shadow:
+    inset 0 0 26px rgba(0, 212, 255, 0.35),
+    0 0 18px rgba(0, 212, 255, 0.35);
+}
+
+.tc-stick.active .tc-stick-mark {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.tc-stick.active .tc-stick-knob {
+  border-color: rgba(0, 229, 255, 0.95);
+  background: radial-gradient(circle at 50% 35%,
+              rgba(0, 229, 255, 0.55) 0%,
+              rgba(0, 212, 255, 0.25) 60%,
+              rgba(0, 212, 255, 0.15) 100%);
+  box-shadow: 0 0 18px rgba(0, 212, 255, 0.55);
 }
 
 /* 右侧动作键 */
@@ -408,6 +476,74 @@ body::before {
 
 .controls-hint p {
   margin: 0;
+}
+
+.controls-hint-menu {
+  margin-top: 8px;
+  color: var(--primary-color);
+  opacity: 0.9;
+}
+
+.controls-pad-hint {
+  margin-top: 6px;
+  color: #39ff88;
+  opacity: 0.85;
+}
+
+/* 手柄按键图例（仅手柄连接时显示，位于画布底部中央） */
+.gp-legend {
+  display: none;
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: rgba(10, 22, 40, 0.85);
+  border: 1px solid rgba(0, 212, 255, 0.35);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: #9fd4ff;
+  pointer-events: none;
+  z-index: 20;
+  white-space: nowrap;
+}
+
+.gp-legend b {
+  color: #39ff88;
+  font-weight: 900;
+}
+
+.gp-legend-menu {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+/* 手柄连接/断开提示 */
+.gp-toast {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid rgba(0, 212, 255, 0.5);
+  color: var(--primary-color);
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  letter-spacing: 1px;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+  z-index: 30;
+  white-space: nowrap;
+}
+
+.gp-toast.show {
+  opacity: 1;
 }
 
 /* 关卡选择 */

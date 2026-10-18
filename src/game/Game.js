@@ -208,8 +208,12 @@ export class Game {
   update(dtf) {
     this.sceneRenderer.update(this.deltaTime);
 
+    // 每帧读取统一输入信号（所有状态均轮询，菜单导航需要它）
+    const input = this.input.poll();
+    if (this.onFrame) this.onFrame(input);
+
     if (this.state === GameState.PLAYING) {
-      this.updatePlaying(dtf);
+      this.updatePlaying(dtf, input);
     }
 
     this.particleSystem.update(this.deltaTime);
@@ -223,9 +227,7 @@ export class Game {
     }
   }
 
-  updatePlaying(dtf) {
-    const input = this.input.poll();
-
+  updatePlaying(dtf, input) {
     if (input.pause) {
       this.pause();
       return;
