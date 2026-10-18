@@ -124,9 +124,9 @@ body::before {
   justify-content: center;
   align-items: center;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.10);
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  color: rgba(255, 255, 255, 0.72);
+  background: rgba(10, 22, 40, 0.28);
+  border: 2px solid rgba(0, 229, 255, 0.35);
+  color: rgba(255, 255, 255, 0.65);
   font-size: 16px;
   font-weight: 700;
   letter-spacing: 1px;
@@ -135,22 +135,26 @@ body::before {
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.08s ease, opacity 0.08s ease, transform 0.08s ease;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  transition: background 0.08s ease, border-color 0.08s ease,
+              box-shadow 0.08s ease, transform 0.08s ease, color 0.08s ease;
 }
 
-/* 按下态视觉反馈 */
+/* 按下态：霓虹发光反馈 */
 .tc-btn.active {
-  background: rgba(0, 229, 255, 0.45);
+  background: rgba(0, 229, 255, 0.32);
   border-color: rgba(0, 229, 255, 0.95);
   color: #ffffff;
-  transform: scale(0.94);
+  box-shadow: 0 0 18px rgba(0, 229, 255, 0.65), inset 0 0 12px rgba(0, 229, 255, 0.35);
+  transform: scale(0.93);
 }
 
 /* 左侧方向键：大按钮 ≥ 80×80 */
 .tc-move {
   width: 80px;
   height: 80px;
-  font-size: 22px;
+  font-size: 24px;
 }
 
 .tc-small {
@@ -161,73 +165,68 @@ body::before {
 
 /* 右侧动作键 */
 .tc-shoot {
-  width: 92px;
-  height: 92px;
-  font-size: 15px;
-  background: rgba(255, 71, 87, 0.18);
-  border-color: rgba(255, 71, 87, 0.55);
+  width: 96px;
+  height: 96px;
+  font-size: 16px;
+  background: rgba(255, 71, 87, 0.16);
+  border-color: rgba(255, 71, 87, 0.5);
+  color: rgba(255, 200, 200, 0.85);
+}
+
+.tc-shoot.active {
+  background: rgba(255, 71, 87, 0.45);
+  border-color: rgba(255, 71, 87, 1);
+  box-shadow: 0 0 24px rgba(255, 71, 87, 0.75), inset 0 0 16px rgba(255, 71, 87, 0.4);
 }
 
 .tc-jump {
-  width: 76px;
-  height: 76px;
+  width: 78px;
+  height: 78px;
   font-size: 18px;
+  background: rgba(177, 74, 237, 0.14);
+  border-color: rgba(177, 74, 237, 0.5);
+  color: rgba(220, 190, 255, 0.85);
+}
+
+.tc-jump.active {
+  background: rgba(177, 74, 237, 0.4);
+  border-color: rgba(177, 74, 237, 1);
+  box-shadow: 0 0 20px rgba(177, 74, 237, 0.7), inset 0 0 14px rgba(177, 74, 237, 0.35);
 }
 
 .tc-crouch {
-  width: 64px;
-  height: 64px;
+  width: 66px;
+  height: 66px;
   font-size: 15px;
 }
 
 .tc-switch {
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   font-size: 12px;
-  background: rgba(57, 255, 136, 0.14);
+  background: rgba(57, 255, 136, 0.12);
   border-color: rgba(57, 255, 136, 0.5);
+  color: rgba(190, 255, 210, 0.85);
 }
 
-/* 横屏提示 */
-.rotate-tip {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: var(--secondary-color);
-  z-index: 9999;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  padding: 20px;
+.tc-switch.active {
+  background: rgba(57, 255, 136, 0.4);
+  border-color: rgba(57, 255, 136, 1);
+  box-shadow: 0 0 18px rgba(57, 255, 136, 0.7), inset 0 0 12px rgba(57, 255, 136, 0.35);
 }
 
-.rotate-tip .rotate-icon {
-  font-size: 64px;
-  margin-bottom: 20px;
-  animation: rotateAnim 1.5s ease-in-out infinite;
-}
-
-@keyframes rotateAnim {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-90deg); }
-}
-
-.rotate-tip p {
-  color: var(--text-color);
-  font-size: 18px;
-  letter-spacing: 2px;
-}
-
-@media (orientation: portrait) and (max-width: 820px) {
-  .rotate-tip {
-    display: flex;
-  }
+/* 强制横屏：竖屏时将游戏容器旋转 90° 铺满视口，无需用户手动转屏 */
+@media (orientation: portrait) {
   .game-container {
-    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 100vh;
+    height: 100vw;
+    max-width: none;
+    max-height: none;
+    transform: translate(-50%, -50%) rotate(90deg);
+    border-radius: 0;
   }
 }
 
@@ -241,9 +240,12 @@ body::before {
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  gap: 8px;
   background: var(--panel-bg);
   backdrop-filter: blur(10px);
   z-index: 10;
+  padding: 16px;
+  overflow-y: auto;
 }
 
 .screen.active {
@@ -252,7 +254,7 @@ body::before {
 
 .title-wrapper {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: 16px;
 }
 
 .game-title {
@@ -393,11 +395,19 @@ body::before {
 }
 
 .controls-hint {
-  position: absolute;
-  bottom: 30px;
+  position: static;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: 1px;
+  text-align: center;
+  max-width: 90%;
+  line-height: 1.8;
+  margin-top: 24px;
+  padding: 0 16px;
+}
+
+.controls-hint p {
+  margin: 0;
 }
 
 /* 关卡选择 */

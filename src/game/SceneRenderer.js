@@ -132,10 +132,10 @@ export class SceneRenderer {
     this.drawNear(ctx, cameraX);
     this.drawRain(ctx);
 
-    // 暗角
-    const vig = ctx.createRadialGradient(this.w / 2, this.h / 2, this.h * 0.35, this.w / 2, this.h / 2, this.h * 0.9);
+    // 暗角（收轻，避免压暗过多画面细节）
+    const vig = ctx.createRadialGradient(this.w / 2, this.h / 2, this.h * 0.4, this.w / 2, this.h / 2, this.h * 0.95);
     vig.addColorStop(0, 'rgba(0,0,0,0)');
-    vig.addColorStop(1, 'rgba(0,0,0,0.55)');
+    vig.addColorStop(1, 'rgba(0,0,0,0.38)');
     ctx.fillStyle = vig;
     ctx.fillRect(0, 0, this.w, this.h);
   }

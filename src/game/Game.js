@@ -62,6 +62,9 @@ export class Game {
     this.screenShake = 0;
     this.screenShakeIntensity = 0;
 
+    // 后处理：预生成 CRT 扫描线贴图（每帧只 drawImage，开销极低）
+    this.scanlineCanvas = this._buildScanlines();
+
     this.onStateChange = null;
     this.onScoreChange = null;
     this.onLivesChange = null;
@@ -485,7 +488,27 @@ export class Game {
       this.drawCanvasHud(ctx);
     }
 
+    // 后处理：CRT 扫描线（极低透明度，营造复古显像管质感，不影响可读性）
+    if (this.scanlineCanvas) {
+      ctx.globalAlpha = 0.06;
+      const pattern = ctx.createPattern(this.scanlineCanvas, 'repeat');
+      ctx.fillStyle = pattern;
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.globalAlpha = 1;
+    }
+
     ctx.restore();
+  }
+
+  // 生成 1×4 的扫描线贴图：第 0 行微暗，其余透明，repeat 铺满画面
+  _buildScanlines() {
+    const c = document.createElement('canvas');
+    c.width = 1;
+    c.height = 4;
+    const cx = c.getContext('2d');
+    cx.fillStyle = 'rgba(0,0,0,0.5)';
+    cx.fillRect(0, 0, 1, 1);
+    return c;
   }
 
   isVisible(x, w) {

@@ -36,6 +36,23 @@ class GameApp {
     this.renderLevelGrid();
     this.showScreen('start');
     this.game.init();
+    this.tryLockLandscape();
+  }
+
+  // 强制横屏：尝试调用 Screen Orientation API（需用户手势，失败则静默，
+  // CSS 端已有 rotate(90deg) fallback 保证竖屏下仍横屏显示）
+  tryLockLandscape() {
+    const lock = () => {
+      try {
+        const so = screen.orientation;
+        if (so && typeof so.lock === 'function') {
+          so.lock('landscape').catch(() => { /* 浏览器不支持/拒绝，忽略 */ });
+        }
+      } catch (_) { /* 忽略 */ }
+    };
+    // 首次用户交互时尝试锁定（浏览器策略要求）
+    const handler = () => { lock(); window.removeEventListener('pointerdown', handler); };
+    window.addEventListener('pointerdown', handler, { once: true });
   }
   
   setupDeviceSpecific() {
@@ -46,9 +63,9 @@ class GameApp {
     const menuHint = document.querySelector('.menu-hint');
     
     if (isTouchDevice) {
-      // 移动端：更新操作提示
+      // 移动端：更新操作提示（与虚拟按键布局一致）
       if (hint) {
-        hint.textContent = '按住屏幕发射 | 左右滑动移动';
+        hint.textContent = '左摇杆：左右移动 · 上跳 / 下蹲 ｜ 右侧：射击 / 跳 / 蹲 / 切枪';
       }
       // 失败界面不显示键盘提示
       if (menuHint) {
