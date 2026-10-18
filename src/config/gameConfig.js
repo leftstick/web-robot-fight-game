@@ -1,16 +1,16 @@
 // 横版卷轴平台射击（run-and-gun）全局配置
-// 渲染管线：逻辑 480x270 离屏画布 → 整数 2x 放大 → 960x540 主画布
+// 渲染管线：逻辑 480x270 离屏画布 → 整数 3x 放大 → 1440x810 主画布
 // 所有坐标均为 480x270 逻辑空间。
 
 export const GameConfig = {
   // 主画布（显示）尺寸
-  CANVAS_WIDTH: 960,
-  CANVAS_HEIGHT: 540,
+  CANVAS_WIDTH: 1440,
+  CANVAS_HEIGHT: 810,
 
   // 逻辑渲染尺寸（离屏画布）
   LOGICAL_WIDTH: 480,
   LOGICAL_HEIGHT: 270,
-  RENDER_SCALE: 2,
+  RENDER_SCALE: 3,
 
   // world / camera 坐标系（逻辑空间）
   WORLD_WIDTH: 2400,      // 关卡世界宽度（默认，可被关卡数据覆盖）
@@ -27,7 +27,7 @@ export const GameConfig = {
     speed: 2.3,            // 水平移动速度
     airControl: 0.85,      // 空中横移系数
     jumpSpeed: -6.6,       // 起跳初速度
-    doubleJump: false,     // 预留二段跳开关
+    doubleJump: true,      // 二段跳开关
     lives: 5,
     invincibleTime: 1200,
     fireInterval: 110,      // 水平射击间隔(ms)

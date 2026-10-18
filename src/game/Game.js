@@ -373,6 +373,14 @@ export class Game {
         this.sfx.enemyShoot();
       }
       if (e.hitFlash > 0) e.hitFlash -= this.deltaTime;
+
+      // Boss 冲撞接触伤害
+      if (e.tryChargeHit && e.tryChargeHit(this.player, this.currentTime)) {
+        if (!this.player.isInvincibleNow(this.currentTime)) {
+          this.damagePlayer();
+          this.addScreenShake(14, 8);
+        }
+      }
     }
   }
 

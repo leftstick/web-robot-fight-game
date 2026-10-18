@@ -94,8 +94,8 @@ class EnemyBase {
     this.facing = pcx >= this.getCenterX() ? 1 : -1;
   }
 
-  tryShoot(t, player) {
-    if (t - this.lastShot < this.cfg.fireInterval) return null;
+  tryShoot(t, player, force = false) {
+    if (!force && t - this.lastShot < this.cfg.fireInterval) return null;
     this.lastShot = t;
     this.shootAnimUntil = t + 130;
 
@@ -169,6 +169,27 @@ class EnemyBase {
     const cx = this.getCenterX();
     const feet = this.y + this.height;
     const flash = this.hitFlash > 0;
+
+    // Boss 冲撞蓄力：红色脉冲光晕
+    if (this.chargeState === 'windup') {
+      const pulse = 0.4 + 0.3 * Math.sin(t / 60);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = '#ff2e4a';
+      ctx.beginPath();
+      ctx.ellipse(cx, feet - this.height / 2, this.width * 1.2, this.height * 0.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    // Boss 冲撞中：拖尾残影
+    if (this.chargeState === 'charging') {
+      ctx.save();
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = '#ff2e4a';
+      ctx.fillRect(this.x - this.vx * 3, this.y, this.width, this.height);
+      ctx.restore();
+    }
 
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -310,6 +331,12 @@ export class Boss extends EnemyBase {
     }
     this.burstLeft = 0;
     this.nextBurstAt = 0;
+    // 冲撞攻击状态
+    this.chargeState = 'idle';   // idle | windup | charging | recover
+    this.chargeEnd = 0;
+    this.chargeDir = 1;
+    this.chargeDamageDealt = false;
+    this.nextActionAt = 0;
   }
 
   update(dtf, deltaTime, t, world, player) {
@@ -318,10 +345,54 @@ export class Boss extends EnemyBase {
 
     const cfg = GameConfig.BOSS;
     const pcx = player.x + player.width / 2;
-    const targetX = pcx + this.facing * 360;
+    const mycx = this.getCenterX();
+    const dist = Math.abs(pcx - mycx);
+
+    // —— 冲撞状态机 ——
+    if (this.chargeState === 'windup') {
+      this.vx = 0;
+      if (t >= this.chargeEnd) {
+        this.chargeState = 'charging';
+        this.chargeEnd = t + 650;          // 冲撞持续 650ms
+        this.chargeDir = this.facing;
+        this.chargeDamageDealt = false;
+      }
+      this.animTime += dtf;
+      this.phys(dtf, world);
+      return null;
+    }
+
+    if (this.chargeState === 'charging') {
+      // 高速冲向玩家方向
+      this.vx = this.chargeDir * cfg.speed * 6.5;
+      if (t >= this.chargeEnd) {
+        this.chargeState = 'recover';
+        this.chargeEnd = t + 500;
+        this.nextActionAt = t + 1500;
+      }
+      this.animTime += dtf;
+      this.phys(dtf, world);
+      // 冲撞中不射击
+      return null;
+    }
+
+    if (this.chargeState === 'recover') {
+      this.vx *= 0.85;
+      if (Math.abs(this.vx) < 0.1) this.vx = 0;
+      if (t >= this.chargeEnd) {
+        this.chargeState = 'idle';
+      }
+      this.animTime += dtf;
+      this.phys(dtf, world);
+      return null;
+    }
+
+    // —— idle：保持距离 + 点射 + 伺机冲撞 ——
+    // 修正：boss 应停在玩家一侧的 engage 距离外（与玩家同侧方向）
+    const targetX = pcx - this.facing * 220;
     const dxTarget = targetX - this.x;
 
-    if (Math.abs(dxTarget) > 10) {
+    if (Math.abs(dxTarget) > 14) {
       this.vx = Math.sign(dxTarget) * cfg.speed;
     } else {
       this.vx = 0;
@@ -330,20 +401,43 @@ export class Boss extends EnemyBase {
     this.animTime += dtf;
     this.phys(dtf, world);
 
-    // 点射：一次连发 3 发
+    // 点射：一次连发 3~5 发，与是否移动无关
     if (this.burstLeft > 0) {
       if (t >= this.nextBurstAt) {
         this.burstLeft--;
-        this.nextBurstAt = t + 140;
-        return this.tryShoot(t, player);
+        this.nextBurstAt = t + 130;
+        return this.tryShoot(t, player, true);
       }
       return null;
     }
 
-    if (this.vx === 0 && t - this.lastShot > cfg.fireInterval * 2) {
-      this.burstLeft = 3;
-      this.nextBurstAt = t;
+    if (t - this.lastShot > cfg.fireInterval) {
+      this.burstLeft = 3 + Math.floor(Math.random() * 3);  // 3~5 发
+      this.nextBurstAt = t + 130;
+      this.burstLeft--;
+      return this.tryShoot(t, player, true);
     }
+
+    // 距离较近且冷却就绪时发起冲撞
+    if (t > this.nextActionAt && dist < 260 && dist > 40) {
+      this.chargeState = 'windup';
+      this.chargeEnd = t + 450;   // 蓄力 450ms（给玩家反应时间）
+      this.vx = 0;
+    }
+
     return null;
+  }
+
+  // 冲撞中对玩家造成接触伤害（由 Game 每帧调用）
+  tryChargeHit(player, currentTime) {
+    if (this.chargeState !== 'charging') return false;
+    if (this.chargeDamageDealt) return false;
+    const pb = player.getBounds();
+    const bb = this.getBounds();
+    if (aabb(pb, bb)) {
+      this.chargeDamageDealt = true;
+      return true;
+    }
+    return false;
   }
 }
