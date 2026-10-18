@@ -242,7 +242,7 @@ export class Game {
 
     if (input.jump && p.jump()) this.sfx.jump();
 
-    if (input.shoot && p.tryFire(this.currentTime)) {
+    if (input.shoot && !p.meleeMode && p.tryFire(this.currentTime)) {
       const b = p.createBullet();
       this.bullets.push(b);
       // 枪口火焰特效
@@ -260,14 +260,66 @@ export class Game {
 
     if (input.switchWeapon) this.switchWeapon();
 
-    p.update(dtf, this.world);
+    // —— 自动切刀：靠近敌人时切换为刀，远离时切回枪 ——
+    this.updateMeleeMode();
+
+    // —— 近战劈砍（X 键）——
+    if (input.melee && p.tryMelee(this.currentTime)) {
+      this.sfx.shoot(); // 复用挥砍音效
+    }
+
+    p.update(dtf, this.world, this.currentTime);
 
     this.updateCamera();
     this.updateBullets(dtf);
     this.updateEnemies(dtf);
     this.updateGrenades(dtf);
     this.spawnBoss();
+
+    // 劈砍碰撞检测（在敌人更新后）
+    this.resolveMelee();
+
     this.checkGameState();
+  }
+
+  // 自动切刀：检测玩家附近是否有敌人
+  updateMeleeMode() {
+    const p = this.player;
+    const m = GameConfig.MELEE;
+    const pcx = p.getCenterX();
+    let nearEnemy = false;
+    for (const e of this.enemies) {
+      if (e.dead || !e.awake) continue;
+      const dist = Math.abs(e.getCenterX() - pcx);
+      if (dist < m.autoSwitchDist) {
+        nearEnemy = true;
+        break;
+      }
+    }
+    p.setMeleeMode(nearEnemy);
+  }
+
+  // 劈砍碰撞与伤害
+  resolveMelee() {
+    const p = this.player;
+    const hitbox = p.getMeleeHitbox();
+    if (!hitbox) return;
+
+    for (const e of this.enemies) {
+      if (e.dead || !e.awake) continue;
+      if (aabb(hitbox, e.getBounds())) {
+        const died = e.takeDamage(GameConfig.MELEE.damage);
+        // 血溅特效
+        const hx = e.getCenterX();
+        const hy = e.y + e.height * 0.4;
+        this.effectSystem.blood(hx, hy);
+        this.particleSystem.createExplosion(hx, hy, '#ff5a5a', 8);
+        this.addScreenShake(4, 3);
+        if (died) this.killEnemy(e);
+        p.markMeleeHit();
+        break; // 一次劈砍只命中一个敌人
+      }
+    }
   }
 
   switchWeapon() {
@@ -759,11 +811,12 @@ export class Game {
     // 武器图标行
     const iconY = abY + 16;
     const curIdx = this.player.weaponIndex % weaponIcons.length;
+    const inMelee = this.player.meleeMode;
     for (let i = 0; i < weaponIcons.length; i++) {
       const ic = weaponIcons[i];
       const ix = baseX + i * 26;
-      // 选中高亮框
-      if (i === curIdx) {
+      // 选中高亮框（持刀模式下枪械全部暗化）
+      if (!inMelee && i === curIdx) {
         ctx.fillStyle = 'rgba(0,229,255,0.25)';
         ctx.fillRect(ix - 2, iconY - 2, ic.sw + 6, ic.sh + 6);
         ctx.strokeStyle = '#00e5ff';
@@ -771,10 +824,38 @@ export class Game {
         ctx.strokeRect(ix - 2.5, iconY - 2.5, ic.sw + 7, ic.sh + 7);
       }
       ctx.drawImage(hudImg, ic.sx, ic.sy, ic.sw, ic.sh, ix, iconY, ic.sw, ic.sh);
+      if (inMelee) {
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(ix, iconY, ic.sw, ic.sh);
+      }
     }
 
+    // 刀图标（持刀模式高亮）
+    const knifeX = baseX + weaponIcons.length * 26;
+    if (inMelee) {
+      ctx.fillStyle = 'rgba(0,229,255,0.25)';
+      ctx.fillRect(knifeX - 2, iconY - 2, 22, 17);
+      ctx.strokeStyle = '#00e5ff';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(knifeX - 2.5, iconY - 2.5, 23, 18);
+    }
+    // 绘制简易刀图标
+    ctx.save();
+    ctx.translate(knifeX + 10, iconY + 6);
+    ctx.rotate(-0.5);
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(0, -2, 5, 4);
+    ctx.fillStyle = '#c0c0c0';
+    ctx.fillRect(4, -3, 2, 6);
+    ctx.fillStyle = '#e8e8f0';
+    ctx.fillRect(6, -1.5, 12, 3);
+    ctx.restore();
+    ctx.fillStyle = inMelee ? '#00e5ff' : '#8a9bb5';
+    ctx.font = '5px monospace';
+    ctx.fillText('刀', knifeX + 1, iconY + 16);
+
     // 手雷图标 + 冷却条
-    const gx = baseX + weaponIcons.length * 26 + 6;
+    const gx = knifeX + 28;
     const gratio = clamp((this.currentTime - this.player.lastGrenade) / GameConfig.PLAYER.grenadeCooldown, 0, 1);
     ctx.drawImage(hudImg, 218, 0, 14, 13, gx, iconY, 14, 13);
     ctx.fillStyle = 'rgba(0,0,0,0.5)';

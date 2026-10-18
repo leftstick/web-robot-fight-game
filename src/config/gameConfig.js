@@ -82,6 +82,17 @@ export const GameConfig = {
     color: '#ff5a5a',
   },
 
+  // 近战武器（刀）
+  MELEE: {
+    damage: 3,              // 劈砍伤害
+    cooldown: 340,          // 劈砍冷却(ms)
+    range: 42,              // 前方攻击距离
+    height: 50,             // 攻击垂直范围
+    windupTime: 150,        // 举起阶段时长(ms)
+    swingTime: 150,         // 落下阶段时长(ms)
+    autoSwitchDist: 68,     // 距离敌人多近时自动切刀
+  },
+
   COLORS: {
     playerBullet: '#ffe066',
     neon: ['#ff2e88', '#00e5ff', '#b14aed', '#39ff88', '#ff8a3d'],

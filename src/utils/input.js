@@ -16,6 +16,7 @@ function createState() {
     crouch: false,
     switchWeapon: false,  // 脉冲信号
     aim: false,           // LT 举枪瞄准
+    melee: false,         // 脉冲信号：X 键近战劈砍
     // 菜单导航（脉冲信号）：键盘/手柄共用，UI 层只读这些信号做菜单选择
     navUp: false,
     navDown: false,
@@ -60,7 +61,7 @@ export class InputManager {
 
     // 脉冲信号的上帧状态（跨来源统一做边沿检测）
     this._prev = {
-      jump: false, switchWeapon: false, pause: false, grenade: false,
+      jump: false, switchWeapon: false, pause: false, grenade: false, melee: false,
       navUp: false, navDown: false, navLeft: false, navRight: false, confirm: false,
     };
 
@@ -270,6 +271,7 @@ export class InputManager {
                      !!jp['KeyL'] || !!jp['KeyQ'] || !!jp['KeyE'] || !!jp['Tab'];
     const kbPause = !!kb['Escape'] || !!kb['KeyP'] || !!jp['Escape'] || !!jp['KeyP'];
     const kbGrenade = !!kb['KeyG'] || !!jp['KeyG'];
+    const kbMelee = !!kb['KeyX'] || !!jp['KeyX'];
 
     // —— 触屏虚拟按键 ——
     const touchLeft = this._touchIsDown('left');
@@ -297,7 +299,7 @@ export class InputManager {
       if (this.onPadChange) this.onPadChange(padNow, padNow ? (this.pad.id || '') : '');
     }
     let padLeft = false, padRight = false, padCrouch = false, padJump = false,
-        padShoot = false, padSwitch = false, padAim = false,
+        padShoot = false, padSwitch = false, padAim = false, padMelee = false,
         padNavUp = false, padNavDown = false, padNavLeft = false, padNavRight = false,
         padConfirm = false, padBack = false, padGrenade = false, padPause = false;
     const pad = this.pad;
@@ -318,6 +320,7 @@ export class InputManager {
       padSwitch = btn(3) || btn(5);                            // Y / RB
       padAim = lt > TRIGGER_THRESHOLD;                         // LT
       padGrenade = btn(4);                                     // LB 手雷
+      padMelee = btn(11);                                      // R3 近战劈砍
       padPause = btn(9);                                       // Start 暂停
 
       // 菜单导航：D-pad(12/13/14/15) 或左摇杆（>0.5 视为方向），A(0) 确认
@@ -355,6 +358,11 @@ export class InputManager {
     const heldGrenade = kbGrenade || padGrenade;
     s.grenade = heldGrenade && !this._prev.grenade;
     this._prev.grenade = heldGrenade;
+
+    // 近战劈砍：键盘 X / 手柄 R3，脉冲信号
+    const heldMelee = kbMelee || padMelee;
+    s.melee = heldMelee && !this._prev.melee;
+    this._prev.melee = heldMelee;
 
     // —— 菜单导航（键盘方向键/回车/空格 + 手柄 D-pad/左摇杆/A），脉冲信号 ——
     const kbNavUp = !!kb['ArrowUp'] || !!jp['ArrowUp'];

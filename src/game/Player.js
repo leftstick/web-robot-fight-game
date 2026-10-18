@@ -35,6 +35,13 @@ export class Player {
     this.lastGrenade = -9999;
     this.shootAnimUntil = 0;
 
+    // 近战（刀）
+    this.meleeMode = false;          // 是否处于持刀模式
+    this.lastMelee = -9999;
+    this.meleePhase = 'idle';        // idle | windup(举起) | swing(落下)
+    this.meleeAnimUntil = 0;
+    this.meleeHitDone = false;       // 本次劈砍是否已造成伤害
+
     this.isInvincible = false;
     this.invincibleEnd = 0;
 
@@ -60,6 +67,11 @@ export class Player {
     this.weaponIndex = 0;
     this.lastFire = -9999;
     this.lastGrenade = -9999;
+    this.meleeMode = false;
+    this.lastMelee = -9999;
+    this.meleePhase = 'idle';
+    this.meleeAnimUntil = 0;
+    this.meleeHitDone = false;
     this.isInvincible = false;
     this.animTime = 0;
     this.frame = 0;
@@ -96,7 +108,8 @@ export class Player {
     return false;
   }
 
-  update(dtf, world) {
+  update(dtf, world, currentTime) {
+    this._t = currentTime || 0;
     // —— 水平 ——
     let move = 0;
     if (this.moveLeft) move -= 1;
@@ -131,6 +144,7 @@ export class Player {
       this.fellOut = true;
     }
 
+    this.updateMeleePhase(currentTime || 0);
     this.animTime += dtf;
   }
 
@@ -211,6 +225,46 @@ export class Player {
     return new Grenade(x, y, g.throwVX * this.facing, g.throwVY);
   }
 
+  // —— 近战（刀）——
+  setMeleeMode(on) {
+    this.meleeMode = on;
+  }
+
+  tryMelee(currentTime) {
+    const m = GameConfig.MELEE;
+    if (currentTime - this.lastMelee < m.cooldown) return false;
+    if (this.meleePhase !== 'idle') return false;
+    this.lastMelee = currentTime;
+    this.meleePhase = 'windup';
+    this.meleeAnimUntil = currentTime + m.windupTime + m.swingTime;
+    this.meleeHitDone = false;
+    return true;
+  }
+
+  // 更新劈砍阶段（每帧调用）
+  updateMeleePhase(currentTime) {
+    const m = GameConfig.MELEE;
+    if (this.meleePhase === 'windup' && currentTime >= this.lastMelee + m.windupTime) {
+      this.meleePhase = 'swing';
+    } else if (this.meleePhase === 'swing' && currentTime >= this.meleeAnimUntil) {
+      this.meleePhase = 'idle';
+    }
+  }
+
+  // 劈砍碰撞盒：仅在 swing 阶段有效
+  getMeleeHitbox() {
+    if (this.meleePhase !== 'swing' || this.meleeHitDone) return null;
+    const m = GameConfig.MELEE;
+    const cx = this.getCenterX();
+    const x = this.facing > 0 ? cx : cx - m.range;
+    const y = this.y + (this.height - m.height) / 2;
+    return { x, y, width: m.range, height: m.height };
+  }
+
+  markMeleeHit() {
+    this.meleeHitDone = true;
+  }
+
   hurt(currentTime) {
     this.isInvincible = true;
     this.invincibleEnd = currentTime + P.invincibleTime;
@@ -233,6 +287,10 @@ export class Player {
       const f = ANIM.PLAYER_JUMP;
       const idx = this.vy < 0 ? 0 : (this.vy > 4 ? 2 : 1);
       return f[idx];
+    }
+    if (this.meleePhase !== 'idle') {
+      // 劈砍中：用 idle 第一帧作为身体基础，刀由 draw 单独绘制
+      return ANIM.PLAYER_IDLE[0];
     }
     if (this.crouching) {
       if (currentTime < this.shootAnimUntil) {
@@ -279,6 +337,87 @@ export class Player {
 
     const recoil = currentTime < this.shootAnimUntil ? -this.facing * 2 : 0;
     sprites.player.draw(ctx, frame, cx + recoil, this.y + this.height, this.facing);
+
+    // —— 绘制刀（持刀模式或劈砍中）——
+    if (this.meleeMode || this.meleePhase !== 'idle') {
+      this.drawBlade(ctx, currentTime);
+    }
+
+    ctx.restore();
+  }
+
+  // 绘制刀和劈砍效果
+  drawBlade(ctx, currentTime) {
+    const m = GameConfig.MELEE;
+    const cx = this.getCenterX();
+    const handX = cx + this.facing * 5;
+    const handY = this.y + this.height * 0.38;
+
+    // 计算刀的角度（弧度，0 = 水平朝前）
+    let angle;
+    let showSlash = false;
+    if (this.meleePhase === 'windup') {
+      // 举起阶段：刀从身侧举到头顶
+      const t = (currentTime - this.lastMelee) / m.windupTime;
+      angle = -20 + (-120 - (-20)) * Math.min(1, t);  // -20° -> -120°
+    } else if (this.meleePhase === 'swing') {
+      // 落下阶段：刀从头顶划到下方
+      const t = (currentTime - this.lastMelee - m.windupTime) / m.swingTime;
+      angle = -120 + (50 - (-120)) * Math.min(1, t);  // -120° -> 50°
+      showSlash = t > 0.15 && t < 0.85;
+    } else {
+      // 持刀待机：刀收在身侧
+      angle = this.facing > 0 ? -20 : 200;
+    }
+
+    const rad = (angle * Math.PI) / 180;
+    const bladeLen = 30;
+    const bladeW = 3;
+    const handleLen = 7;
+    const handleW = 4;
+
+    ctx.save();
+    ctx.translate(handX, handY);
+    ctx.rotate(rad * (this.facing > 0 ? 1 : -1));
+
+    // 刀柄
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(0, -handleW / 2, handleLen, handleW);
+    // 护手
+    ctx.fillStyle = '#c0c0c0';
+    ctx.fillRect(handleLen - 1, -handleW, 3, handleW * 2);
+    // 刀身
+    ctx.fillStyle = '#e8e8f0';
+    ctx.fillRect(handleLen + 2, -bladeW / 2, bladeLen, bladeW);
+    // 刀身高光
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillRect(handleLen + 2, -bladeW / 2, bladeLen, 1);
+    // 刀尖
+    ctx.fillStyle = '#e8e8f0';
+    ctx.beginPath();
+    ctx.moveTo(handleLen + 2 + bladeLen, -bladeW / 2);
+    ctx.lineTo(handleLen + 2 + bladeLen + 4, 0);
+    ctx.lineTo(handleLen + 2 + bladeLen, bladeW / 2);
+    ctx.fill();
+
+    // 劈砍刀光（落下阶段）
+    if (showSlash) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.7;
+      const grad = ctx.createLinearGradient(0, 0, bladeLen + 12, 0);
+      grad.addColorStop(0, 'rgba(0,229,255,0)');
+      grad.addColorStop(0.5, 'rgba(0,229,255,0.8)');
+      grad.addColorStop(1, 'rgba(255,255,255,0.9)');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(0, 0, bladeLen + 6, -0.5, 0.5);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.restore();
   }
 }
