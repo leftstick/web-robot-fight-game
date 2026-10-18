@@ -104,11 +104,10 @@ export class Player {
 
     let speed = P.speed * (this.onGround ? 1 : P.airControl);
     if (this.aiming) speed *= 0.5;   // 举枪瞄准：移动减速
+    if (this.crouching) speed *= 0.45;  // 蹲下移动：大幅减速（蹲走）
     this.vx = move * speed;
 
     if (move !== 0) this.facing = move > 0 ? 1 : -1;
-    // 蹲下时不能移动
-    if (this.crouching) this.vx = 0;
 
     this.x += this.vx * dtf;
     this.resolveHorizontal(world.platforms);
@@ -239,6 +238,12 @@ export class Player {
       if (currentTime < this.shootAnimUntil) {
         const f = ANIM.PLAYER_SHOOT_CROUCH;
         return f[Math.floor(currentTime / 70) % f.length];
+      }
+      const crouchMoving = this.moveLeft || this.moveRight;
+      if (crouchMoving) {
+        // 蹲走：循环蹲下帧，节奏比跑步慢
+        const f = ANIM.PLAYER_SHOOT_CROUCH;
+        return f[Math.floor(this.animTime / 8) % f.length];
       }
       return ANIM.PLAYER_SHOOT_CROUCH[1];
     }
