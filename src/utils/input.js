@@ -216,6 +216,19 @@ export class InputManager {
     const R = this.stickRadius;
     let dx = clientX - c.x;
     let dy = clientY - c.y;
+
+    // 竖屏模式下 .game-container 被 CSS rotate(90deg) 旋转，
+    // 屏幕坐标与容器本地坐标不一致，需做逆旋转换算，否则方向全反。
+    // rotate(90deg) 为顺时针90°，逆变换（屏幕→本地）：localX=dy, localY=-dx
+    if (typeof window !== 'undefined' &&
+        window.matchMedia &&
+        window.matchMedia('(orientation: portrait)').matches) {
+      const localDx = dy;
+      const localDy = -dx;
+      dx = localDx;
+      dy = localDy;
+    }
+
     const len = Math.hypot(dx, dy);
     const clamped = Math.min(len, R);
     const ux = len > 0 ? dx / len : 0;
