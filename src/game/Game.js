@@ -313,7 +313,11 @@ export class Game {
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
       if (e.dead) {
-        this.enemies.splice(i, 1);
+        // 死亡动画播放完毕后移除（给玩家看到倒地/爆炸效果）
+        e.deathTime += this.deltaTime;
+        if (e.deathTime > 600) {
+          this.enemies.splice(i, 1);
+        }
         continue;
       }
       if (!e.awake) {

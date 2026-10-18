@@ -224,19 +224,34 @@ export class Player {
   }
 
   pickFrame(currentTime) {
-    if (!this.onGround) return ANIM.JUMP[0];
-    if (this.crouching) return ANIM.CROUCH[0];
+    if (this.fellOut || this.dead) {
+      const f = ANIM.PLAYER_DEATH;
+      const idx = Math.min(f.length - 1, Math.floor(this.deathTime / 70));
+      return f[idx];
+    }
+    if (!this.onGround) {
+      const f = ANIM.PLAYER_JUMP;
+      const idx = this.vy < 0 ? 0 : (this.vy > 4 ? 2 : 1);
+      return f[idx];
+    }
+    if (this.crouching) {
+      if (currentTime < this.shootAnimUntil) {
+        const f = ANIM.PLAYER_SHOOT_CROUCH;
+        return f[Math.floor(currentTime / 70) % f.length];
+      }
+      return ANIM.PLAYER_SHOOT_CROUCH[1];
+    }
     if (currentTime < this.shootAnimUntil) {
-      const f = ANIM.SHOOT;
+      const f = ANIM.PLAYER_SHOOT;
       return f[Math.floor(currentTime / 70) % f.length];
     }
     const moving = this.moveLeft || this.moveRight;
     if (moving) {
-      const f = ANIM.WALK;
-      return f[Math.floor(this.animTime / 7) % f.length];
+      const f = ANIM.PLAYER_RUN;
+      return f[Math.floor(this.animTime / 5) % f.length];
     }
-    const f = ANIM.IDLE;
-    return f[Math.floor(this.animTime / 22) % f.length];
+    const f = ANIM.PLAYER_IDLE;
+    return f[Math.floor(this.animTime / 20) % f.length];
   }
 
   draw(ctx, currentTime, cameraX) {

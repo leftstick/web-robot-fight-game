@@ -132,25 +132,33 @@ class EnemyBase {
   takeDamage(damage) {
     this.hp -= damage;
     this.hitFlash = 130;
-    if (this.hp <= 0) {
+    if (this.hp <= 0 && !this.dead) {
       this.dead = true;
+      this.deathTime = 0;
       return true;
     }
     return false;
   }
 
   pickFrame(t) {
-    if (this.crouching) return ANIM.CROUCH[0];
+    if (this.dead) {
+      const f = this.sheetKey === 'boss' ? ANIM.BOSS_DEATH : ANIM.THUG_DEATH;
+      const idx = Math.min(f.length - 1, Math.floor(this.deathTime / 80));
+      return f[idx];
+    }
+    if (this.crouching) {
+      return this.sheetKey === 'boss' ? ANIM.BOSS_IDLE[0] : ANIM.THUG_CROUCH[0];
+    }
     if (t < this.shootAnimUntil) {
-      const f = ANIM.SHOOT;
+      const f = this.sheetKey === 'boss' ? ANIM.BOSS_GATLING : ANIM.THUG_SHOOT;
       return f[Math.floor(t / 70) % f.length];
     }
-    if (!this.onGround) return ANIM.JUMP[0];
+    if (!this.onGround) return this.sheetKey === 'boss' ? ANIM.BOSS_IDLE[0] : ANIM.THUG_IDLE[0];
     if (this.vx !== 0) {
-      const f = ANIM.WALK;
+      const f = this.sheetKey === 'boss' ? ANIM.BOSS_WALK : ANIM.THUG_WALK;
       return f[Math.floor(this.animTime / 8) % f.length];
     }
-    const f = ANIM.IDLE;
+    const f = this.sheetKey === 'boss' ? ANIM.BOSS_IDLE : ANIM.THUG_IDLE;
     return f[Math.floor(this.animTime / 24) % f.length];
   }
 
@@ -170,7 +178,11 @@ class EnemyBase {
 
     sheet.draw(ctx, frame, cx, feet, this.facing, flash);
 
-    // 血条
+    // 血条（死亡时不显示）
+    if (this.dead) {
+      ctx.restore();
+      return;
+    }
     const bw = this.standHeight > 60 ? 70 : this.width + 8;
     const bx = cx - bw / 2;
     const by = this.y - 10;
@@ -186,7 +198,10 @@ class EnemyBase {
 
 export class Thug extends EnemyBase {
   constructor(feetX, feetY) {
-    super(GameConfig.THUG, 'thug', feetX, feetY);
+    // 随机选择三种帮派暴徒外观变体
+    const variants = ['thug_mohawk', 'thug_mask', 'thug_bald'];
+    const variant = variants[Math.floor(Math.random() * variants.length)];
+    super(GameConfig.THUG, variant, feetX, feetY);
     this.state = 'advance';
     this.stateEnd = 0;
     this.claimedCover = null;
