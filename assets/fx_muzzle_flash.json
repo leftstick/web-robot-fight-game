@@ -1,0 +1,96 @@
+{
+  "frames": [
+    {
+      "filename": "muzzle_flash_0",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 96,
+        "h": 96
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 96,
+        "h": 96
+      },
+      "sourceSize": {
+        "w": 96,
+        "h": 96
+      },
+      "duration": 80
+    },
+    {
+      "filename": "muzzle_flash_1",
+      "frame": {
+        "x": 96,
+        "y": 0,
+        "w": 96,
+        "h": 96
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 96,
+        "h": 96
+      },
+      "sourceSize": {
+        "w": 96,
+        "h": 96
+      },
+      "duration": 80
+    },
+    {
+      "filename": "muzzle_flash_2",
+      "frame": {
+        "x": 192,
+        "y": 0,
+        "w": 96,
+        "h": 96
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 96,
+        "h": 96
+      },
+      "sourceSize": {
+        "w": 96,
+        "h": 96
+      },
+      "duration": 80
+    }
+  ],
+  "meta": {
+    "app": "neon-huntdown-build",
+    "version": "1.0",
+    "image": "",
+    "format": "RGBA8888",
+    "size": {
+      "w": 288,
+      "h": 96
+    },
+    "scale": "1",
+    "frameTags": [
+      {
+        "name": "muzzle_flash",
+        "from": 0,
+        "to": 2,
+        "direction": "forward"
+      }
+    ],
+    "layers": [
+      {
+        "name": "default",
+        "opacity": 255,
+        "blendMode": "normal"
+      }
+    ]
+  }
+}

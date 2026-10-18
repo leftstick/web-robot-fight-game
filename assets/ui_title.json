@@ -1,0 +1,45 @@
+{
+  "frames": [
+    {
+      "filename": "title",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 320,
+        "h": 64
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 320,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 320,
+        "h": 64
+      },
+      "duration": 100
+    }
+  ],
+  "meta": {
+    "app": "neon-huntdown-build",
+    "version": "1.0",
+    "image": "",
+    "format": "RGBA8888",
+    "size": {
+      "w": 320,
+      "h": 64
+    },
+    "scale": "1",
+    "frameTags": [],
+    "layers": [
+      {
+        "name": "default",
+        "opacity": 255,
+        "blendMode": "normal"
+      }
+    ]
+  }
+}

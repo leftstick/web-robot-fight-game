@@ -166,16 +166,16 @@ export class Player {
 
   // —— 开火（水平）——
   tryFire(currentTime) {
-    if (currentTime - this.lastFire < P.fireInterval) return false;
+    const interval = this.getWeapon().fireInterval || P.fireInterval;
+    if (currentTime - this.lastFire < interval) return false;
     this.lastFire = currentTime;
     this.shootAnimUntil = currentTime + 130;
     return true;
   }
 
   getGunHeight() {
-    // 相对碰撞盒顶部的枪口高度：站立时枪口高于掩体（探头射击），
-    // 蹲下时枪口低于掩体顶部（被自己面前的掩体挡住 / 藏好）。
-    return 12;
+    // 精灵 64px，碰撞盒 56px，枪口位于 sprite 内约 y+28 处
+    return 20;
   }
 
   getWeapon() {
@@ -184,15 +184,16 @@ export class Player {
   }
 
   createBullet() {
+    const w = this.getWeapon();
     const gy = this.y + this.getGunHeight();
     const x = this.facing > 0
       ? this.x + this.width
       : this.x - P.bulletWidth;
-    return new Bullet(x, gy - P.bulletHeight / 2, P.bulletSpeed * this.facing, 0, {
+    return new Bullet(x, gy - P.bulletHeight / 2, (w.bulletSpeed || P.bulletSpeed) * this.facing, 0, {
       width: P.bulletWidth,
       height: P.bulletHeight,
-      damage: P.bulletDamage,
-      color: this.getWeapon().color,
+      damage: w.bulletDamage || P.bulletDamage,
+      color: w.color,
       owner: BulletOwner.PLAYER,
     });
   }

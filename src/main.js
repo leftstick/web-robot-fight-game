@@ -34,6 +34,7 @@ class GameApp {
     this.setupEventListeners();
     this.setupDeviceSpecific();
     this.renderLevelGrid();
+    // 显示加载画面，素材加载完成后显示开始界面
     this.showScreen('start');
     this.game.init();
     this.tryLockLandscape();

@@ -1,0 +1,24 @@
+{
+  "name": "workspace",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leftstick/web-robot-fight-game.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/leftstick/web-robot-fight-game/issues"
+  },
+  "homepage": "https://github.com/leftstick/web-robot-fight-game#readme",
+  "dependencies": {
+    "canvas": "^3.2.3"
+  }
+}

@@ -1,8 +1,22 @@
 import { GameConfig } from '../config/gameConfig.js';
+import { getSprites } from './SpriteSheet.js';
 
-// 掩体：箱子 / 汽车 / 矮墙。可破坏的能被打碎，且会挡住飞向玩家的子弹。
+// 掩体：7 种道具，每种 3 个破坏阶段（完好/受损/破碎）。
+// 视觉使用 covers.png 精灵图，底部对齐。
+const COVER_TYPES = ['barrier', 'oildrum', 'crate', 'trash', 'car', 'vending', 'sandbags'];
+const COVER_COLS = 7;
+const STAGE_FRAMES = 3;
+
+// 根据尺寸推断类型（兼容未指定 type 的旧关卡数据）
+function inferType(w, h) {
+  if (h >= 28 && w >= 60) return 'car';
+  if (h >= 26) return 'crate';
+  if (w >= 50) return 'sandbags';
+  return 'barrier';
+}
+
 export class Cover {
-  constructor(x, y, w, h, hp, destructible) {
+  constructor(x, y, w, h, hp, destructible, type) {
     this.x = x;
     this.y = y;
     this.w = w;
@@ -11,10 +25,9 @@ export class Cover {
     this.hp = hp;
     this.destructible = destructible !== false;
     this.hitFlash = 0;
-    // 依据尺寸决定外观
-    if (h >= 30 && w >= 100) this.type = 'car';
-    else if (h >= 28) this.type = 'crate';
-    else this.type = 'wall';
+    this.type = type || inferType(w, h);
+    this.typeIndex = COVER_TYPES.indexOf(this.type);
+    if (this.typeIndex < 0) this.typeIndex = 0;
   }
 
   getBounds() {
@@ -23,6 +36,15 @@ export class Cover {
 
   getCenter() {
     return { x: this.x + this.w / 2, y: this.y + this.h / 2 };
+  }
+
+  // 当前破坏阶段：0=完好, 1=受损, 2=破碎
+  getStage() {
+    if (!this.destructible) return 0;
+    const ratio = this.hp / this.maxHp;
+    if (ratio <= 0) return 2;
+    if (ratio < 0.5) return 1;
+    return 0;
   }
 
   takeDamage(damage) {
@@ -40,94 +62,65 @@ export class Cover {
   }
 
   draw(ctx) {
+    const sprites = getSprites();
+    const sheet = sprites.covers;
+    const stage = this.getStage();
+
+    // 破碎后不绘制（或绘制残块）
+    if (stage >= 2) {
+      // 绘制破碎残块帧
+      if (sheet) {
+        const frame = 2 * COVER_COLS + this.typeIndex;
+        sheet.drawFrame(ctx, frame, this.x, this.y, this.w, this.h);
+      }
+      return;
+    }
+
+    if (sheet) {
+      const frame = stage * COVER_COLS + this.typeIndex;
+      const fw = sheet.frameW;
+      const fh = sheet.frameH;
+      // 宽型掩体（车/路障/沙袋）按宽度缩放，高型（油桶/垃圾桶/售货机）按高度缩放
+      const wideTypes = ['car', 'barrier', 'sandbags'];
+      const isWide = wideTypes.includes(this.type);
+      let scale;
+      if (isWide) {
+        scale = this.w / fw;
+      } else {
+        scale = this.h / fh;
+      }
+      const drawW = fw * scale;
+      const drawH = fh * scale;
+      const drawX = this.x + (this.w - drawW) / 2;
+      const drawY = this.y + this.h - drawH; // 底部对齐
+      ctx.save();
+      if (this.hitFlash > 0) {
+        ctx.globalAlpha = 0.85;
+      }
+      sheet.drawFrame(ctx, frame, drawX, drawY, drawW, drawH);
+      if (this.hitFlash > 0) {
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.fillRect(drawX, drawY, drawW, drawH);
+      }
+      ctx.restore();
+    } else {
+      // 回退：程序化绘制
+      this._drawFallback(ctx);
+    }
+  }
+
+  _drawFallback(ctx) {
     const x = Math.round(this.x);
     const y = Math.round(this.y);
     const w = this.w;
     const h = this.h;
     const flash = this.hitFlash > 0;
-
     ctx.save();
-
-    if (this.type === 'car') {
-      // 车身
-      ctx.fillStyle = flash ? '#ffffff' : '#3a2f55';
-      ctx.fillRect(x, y + h * 0.34, w, h * 0.62);
-      // 车顶
-      ctx.fillStyle = '#2a2240';
-      ctx.fillRect(x + w * 0.18, y, w * 0.64, h * 0.4);
-      // 车窗（霓虹反光）
-      ctx.fillStyle = 'rgba(0,229,255,0.55)';
-      ctx.fillRect(x + w * 0.24, y + h * 0.1, w * 0.2, h * 0.2);
-      ctx.fillRect(x + w * 0.56, y + h * 0.1, w * 0.2, h * 0.2);
-      // 高光边
-      ctx.fillStyle = 'rgba(255,255,255,0.18)';
-      ctx.fillRect(x, y + h * 0.34, w, 3);
-      // 轮子
-      ctx.fillStyle = '#12101a';
-      for (const wx of [x + w * 0.2, x + w * 0.8]) {
-        ctx.beginPath();
-        ctx.ellipse(wx, y + h * 0.96, w * 0.11, h * 0.1, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // 底部霓虹
-      ctx.fillStyle = 'rgba(255,46,136,0.35)';
-      ctx.fillRect(x + 4, y + h - 3, w - 8, 3);
-    } else if (this.type === 'crate') {
-      ctx.fillStyle = flash ? '#ffffff' : '#58616e';
-      ctx.fillRect(x, y, w, h);
-      ctx.fillStyle = 'rgba(255,255,255,0.16)';
-      ctx.fillRect(x, y, w, 4);
-      ctx.strokeStyle = '#2c333c';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
-      // 交叉支撑
-      ctx.beginPath();
-      ctx.moveTo(x + 3, y + 3);
-      ctx.lineTo(x + w - 3, y + h - 3);
-      ctx.moveTo(x + w - 3, y + 3);
-      ctx.lineTo(x + 3, y + h - 3);
-      ctx.stroke();
-    } else {
-      // 混凝土矮墙
-      ctx.fillStyle = flash ? '#ffffff' : '#3b4048';
-      ctx.fillRect(x, y, w, h);
-      ctx.fillStyle = 'rgba(255,255,255,0.14)';
-      ctx.fillRect(x, y, w, 3);
-      ctx.strokeStyle = '#2a2e35';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-      for (let by = y + h * 0.5; by < y + h; by += h * 0.5) {
-        ctx.beginPath();
-        ctx.moveTo(x, by);
-        ctx.lineTo(x + w, by);
-        ctx.stroke();
-      }
-    }
-
-    // 破损裂纹
-    if (this.destructible && this.hp < this.maxHp) {
-      const ratio = this.hp / this.maxHp;
-      ctx.strokeStyle = `rgba(0,0,0,${0.35 + (1 - ratio) * 0.4})`;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(x + w * 0.3, y + 2);
-      ctx.lineTo(x + w * 0.42, y + h * 0.5);
-      ctx.lineTo(x + w * 0.3, y + h - 2);
-      ctx.moveTo(x + w * 0.68, y + 2);
-      ctx.lineTo(x + w * 0.6, y + h * 0.45);
-      ctx.lineTo(x + w * 0.74, y + h - 2);
-      ctx.stroke();
-    }
-
-    // 血条（受损时显示）
-    if (this.destructible && this.hp < this.maxHp) {
-      const bw = w;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(x, y - 7, bw, 4);
-      ctx.fillStyle = '#39ff88';
-      ctx.fillRect(x, y - 7, bw * (this.hp / this.maxHp), 4);
-    }
-
+    ctx.fillStyle = flash ? '#ffffff' : '#3b4048';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    ctx.fillRect(x, y, w, 2);
     ctx.restore();
   }
 }

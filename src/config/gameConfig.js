@@ -1,78 +1,84 @@
 // 横版卷轴平台射击（run-and-gun）全局配置
-// 品类锁定：横屏平台射击，不是纵向弹幕飞机打怪。
+// 渲染管线：逻辑 480x270 离屏画布 → 整数 2x 放大 → 960x540 主画布
+// 所有坐标均为 480x270 逻辑空间。
 
 export const GameConfig = {
-  // 横屏 16:9 基准分辨率
+  // 主画布（显示）尺寸
   CANVAS_WIDTH: 960,
   CANVAS_HEIGHT: 540,
 
-  // world / camera 坐标系
-  WORLD_WIDTH: 4800,      // 关卡世界宽度（默认，可被关卡数据覆盖）
-  GROUND_Y: 470,          // 地面顶面 y（世界坐标）
-  GROUND_THICKNESS: 70,   // 地面厚度
+  // 逻辑渲染尺寸（离屏画布）
+  LOGICAL_WIDTH: 480,
+  LOGICAL_HEIGHT: 270,
+  RENDER_SCALE: 2,
 
-  GRAVITY: 0.7,           // 重力加速度（像素/帧，按 dt 归一化）
-  MAX_FALL_SPEED: 16,     // 最大下落速度
+  // world / camera 坐标系（逻辑空间）
+  WORLD_WIDTH: 2400,      // 关卡世界宽度（默认，可被关卡数据覆盖）
+  GROUND_Y: 235,          // 地面顶面 y（世界坐标）
+  GROUND_THICKNESS: 35,   // 地面厚度
+
+  GRAVITY: 0.35,           // 重力加速度（像素/帧，按 dt 归一化）
+  MAX_FALL_SPEED: 8,       // 最大下落速度
 
   PLAYER: {
-    width: 32,
-    height: 48,
-    crouchHeight: 28,       // 蹲下/贴掩体时的高度
-    speed: 4.6,             // 水平移动速度
-    airControl: 0.85,       // 空中横移系数
-    jumpSpeed: -13.2,       // 起跳初速度
-    doubleJump: false,      // 预留二段跳开关
+    width: 18,             // 碰撞盒宽（480x270 下约 18x56）
+    height: 56,            // 碰撞盒高（精灵 64，身体约 56）
+    crouchHeight: 32,      // 蹲下/贴掩体时的高度
+    speed: 2.3,            // 水平移动速度
+    airControl: 0.85,      // 空中横移系数
+    jumpSpeed: -6.6,       // 起跳初速度
+    doubleJump: false,     // 预留二段跳开关
     lives: 5,
     invincibleTime: 1200,
     fireInterval: 110,      // 水平射击间隔(ms)
-    bulletSpeed: 13,
+    bulletSpeed: 6.5,
     bulletDamage: 1,
-    bulletWidth: 16,
-    bulletHeight: 4,
+    bulletWidth: 12,
+    bulletHeight: 3,
     grenadeCooldown: 1400,
   },
 
   THUG: {                   // 人形暴徒
-    width: 32,
-    height: 48,
-    crouchHeight: 28,
-    speed: 1.5,
+    width: 18,
+    height: 56,
+    crouchHeight: 32,
+    speed: 0.75,
     hp: 3,
     score: 120,
     fireInterval: 1150,
-    bulletSpeed: 6.5,
+    bulletSpeed: 3.25,
     bulletDamage: 1,
-    engageRange: 430,       // 进入该距离后停下对射
+    engageRange: 215,       // 进入该距离后停下对射
     coverHideTime: 900,     // 掩体后隐蔽时长
     coverPeekTime: 700,     // 探头射击时长
   },
 
   BOSS: {                   // 关底帮派 BOSS
-    width: 56,
-    height: 84,
-    crouchHeight: 56,
-    speed: 0.9,
+    width: 30,
+    height: 80,
+    crouchHeight: 50,
+    speed: 0.45,
     hp: 42,
     score: 2000,
     fireInterval: 850,
-    bulletSpeed: 7.5,
+    bulletSpeed: 3.75,
     bulletDamage: 2,
   },
 
   GRENADE: {
-    width: 10,
-    height: 10,
-    throwVX: 8.5,
-    throwVY: -10.5,
-    gravity: 0.5,
+    width: 8,
+    height: 8,
+    throwVX: 4.25,
+    throwVY: -5.25,
+    gravity: 0.25,
     fuse: 1300,
-    radius: 95,             // 爆炸范围
+    radius: 48,             // 爆炸范围
     damage: 6,
   },
 
   ENEMY_BULLET: {
-    width: 14,
-    height: 4,
+    width: 10,
+    height: 3,
     color: '#ff5a5a',
   },
 
@@ -81,17 +87,17 @@ export const GameConfig = {
     neon: ['#ff2e88', '#00e5ff', '#b14aed', '#39ff88', '#ff8a3d'],
   },
 
-  // 武器槽接口：本轮只做切枪占位（弹丸颜色区分），
-  // 射速 / 弹速 / 后坐力差异留到阶段四实现。
+  // 武器槽接口
   WEAPONS: [
-    { id: 'pistol', name: '手枪', color: '#ffe066' },
-    { id: 'rifle', name: '步枪', color: '#5fe6ff' },
+    { id: 'pistol', name: '手枪', color: '#ffe066', fireInterval: 110, bulletSpeed: 6.5, bulletDamage: 1 },
+    { id: 'rifle', name: '步枪', color: '#5fe6ff', fireInterval: 75, bulletSpeed: 7.5, bulletDamage: 1 },
+    { id: 'plasma', name: '线光线弹枪', color: '#39ff88', fireInterval: 160, bulletSpeed: 5.5, bulletDamage: 2 },
   ],
 };
 
 // 关卡元信息（用于选关界面），真正的关卡布局在 src/data/levels.json
 export const LEVEL_META = [
-  { id: 1, name: '霓虹街区', worldWidth: 4800 },
-  { id: 2, name: '雨夜码头', worldWidth: 4600 },
-  { id: 3, name: '帮派老巢', worldWidth: 5400 },
+  { id: 1, name: '霓虹街区', worldWidth: 2400 },
+  { id: 2, name: '雨夜码头', worldWidth: 2300 },
+  { id: 3, name: '帮派老巢', worldWidth: 2700 },
 ];

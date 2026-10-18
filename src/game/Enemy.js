@@ -100,7 +100,7 @@ class EnemyBase {
     this.shootAnimUntil = t + 130;
 
     // 枪口：贴掩体时从掩体前沿射出，避免被自己身后的掩体挡住
-    const gunY = this.y + 12;
+    const gunY = this.y + Math.round(this.height * 0.36);
     const facing = this.facing;
     const eb = GameConfig.ENEMY_BULLET;
     let x;
