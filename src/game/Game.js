@@ -263,8 +263,8 @@ export class Game {
     // —— 自动切刀：靠近敌人时切换为刀，远离时切回枪 ——
     this.updateMeleeMode();
 
-    // —— 近战劈砍（X 键）——
-    if (input.melee && p.tryMelee(this.currentTime)) {
+    // —— 近战劈砍（X 键；持刀时射击键也直接挥砍，避免近身后无法攻击）——
+    if ((input.melee || (p.meleeMode && input.shoot)) && p.tryMelee(this.currentTime)) {
       this.sfx.shoot(); // 复用挥砍音效
     }
 
