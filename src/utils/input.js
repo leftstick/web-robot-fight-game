@@ -58,6 +58,9 @@ export class InputManager {
     this.stickVec = { x: 0, y: 0 };
     this.stickCenter = { x: 0, y: 0 };
     this.stickRadius = 1;
+    // 摇杆元素从屏幕坐标到本地坐标的逆变换线性部分（含祖先旋转），
+    // 在 pointerdown 时按真实渲染矩阵重新测量
+    this.stickInv = { a: 1, b: 0, c: 0, d: 1 };
 
     // 脉冲信号的上帧状态（跨来源统一做边沿检测）
     this._prev = {
@@ -190,7 +193,8 @@ export class InputManager {
       }
       const r = el.getBoundingClientRect();
       this.stickCenter = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-      this.stickRadius = Math.max(1, r.width * 0.34);
+      this.stickRadius = Math.max(1, Math.min(r.width, r.height) * 0.34);
+      this.stickInv = this._measureStickInverse(el);
       el.classList.add('active');
       this._stickMove(e.clientX, e.clientY);
     });
@@ -212,28 +216,46 @@ export class InputManager {
     el.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
+  // 测出「屏幕坐标 → 摇杆本地坐标」的逆变换线性部分。
+  // 竖屏时 .game-container 被 CSS rotate(90deg) 旋转，触摸的 clientX/clientY 是
+  // 屏幕坐标，而摇杆绘制在容器本地坐标系里，必须先逆变换，否则方向整体错位 90°。
+  // 这里不再用 matchMedia 猜（它和 CSS 实际是否旋转并不保证同步），
+  // 而是把从元素到根节点的真实变换矩阵乘起来再求逆，旋转多少度都自动正确。
+  _measureStickInverse(el) {
+    const identity = { a: 1, b: 0, c: 0, d: 1 };
+    if (typeof DOMMatrix === 'undefined' || typeof getComputedStyle === 'undefined') {
+      return identity;
+    }
+    let acc = null;
+    let node = el;
+    while (node && node.nodeType === 1) {
+      const t = getComputedStyle(node).transform;
+      if (t && t !== 'none') {
+        const m = new DOMMatrix(t);
+        acc = acc ? m.multiply(acc) : m;   // 祖先在左侧：M_root * ... * M_self
+      }
+      node = node.parentElement;
+    }
+    if (!acc) return identity;
+    const inv = acc.inverse();
+    return { a: inv.a, b: inv.b, c: inv.c, d: inv.d };
+  }
+
   _stickMove(clientX, clientY) {
     const c = this.stickCenter;
     const R = this.stickRadius;
-    let dx = clientX - c.x;
-    let dy = clientY - c.y;
+    const dx = clientX - c.x;
+    const dy = clientY - c.y;
 
-    // 竖屏模式下 .game-container 被 CSS rotate(90deg) 旋转，
-    // 屏幕坐标与容器本地坐标不一致，需做逆旋转换算，否则方向全反。
-    // rotate(90deg) 为顺时针90°，逆变换（屏幕→本地）：localX=dy, localY=-dx
-    if (typeof window !== 'undefined' &&
-        window.matchMedia &&
-        window.matchMedia('(orientation: portrait)').matches) {
-      const localDx = dy;
-      const localDy = -dx;
-      dx = localDx;
-      dy = localDy;
-    }
+    // 逆变换（只对方向增量生效，平移分量与此无关）
+    const inv = this.stickInv;
+    const lx = inv.a * dx + inv.c * dy;
+    const ly = inv.b * dx + inv.d * dy;
 
-    const len = Math.hypot(dx, dy);
+    const len = Math.hypot(lx, ly);
     const clamped = Math.min(len, R);
-    const ux = len > 0 ? dx / len : 0;
-    const uy = len > 0 ? dy / len : 0;
+    const ux = len > 0 ? lx / len : 0;
+    const uy = len > 0 ? ly / len : 0;
 
     this.stickVec.x = (ux * clamped) / R;   // -1 ~ 1
     this.stickVec.y = (uy * clamped) / R;
