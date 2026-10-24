@@ -5,7 +5,7 @@
 const DEADZONE = 0.15;            // 手柄摇杆死区阈值
 const TRIGGER_THRESHOLD = 0.3;    // 扳机视为按下的阈值
 const STICK_DEADZONE_X = 0.28;    // 虚拟摇杆水平死区（移动）
-const STICK_DEADZONE_Y = 0.45;    // 虚拟摇杆垂直死区（跳/蹲，阈值更高避免误触）
+const STICK_DEADZONE_Y = 0.45;    // 虚拟摇杆垂直死区（下推蹲下，阈值更高避免误触）
 
 function createState() {
   return {
@@ -367,13 +367,13 @@ export class InputManager {
     // —— 汇总为逻辑信号 ——
     s.moveLeft = kbLeft || touchLeft || stickLeft || padLeft;
     s.moveRight = kbRight || touchRight || stickRight || padRight;
-    // 摇杆也支持"上推=跳、下推=蹲"，与方向键功能完全等价
+    // 摇杆只管水平移动与下推蹲下；跳跃由专门的跳跃键触发，上推不绑定任何动作
     s.crouch = kbCrouch || touchCrouch || stickDown || padCrouch;
     s.shoot = kbShoot || touchShoot || padShoot;
     s.aim = kbAim || touchAim || padAim;
 
     // 脉冲信号：跨来源统一边沿检测
-    const heldJump = kbJump || touchJump || stickUp || padJump;
+    const heldJump = kbJump || touchJump || padJump;
     s.jump = heldJump && !this._prev.jump;
     this._prev.jump = heldJump;
 
