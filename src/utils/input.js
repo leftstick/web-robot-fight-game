@@ -58,9 +58,9 @@ export class InputManager {
     this.stickVec = { x: 0, y: 0 };
     this.stickCenter = { x: 0, y: 0 };
     this.stickRadius = 1;
-    // 摇杆元素从屏幕坐标到本地坐标的逆变换线性部分（含祖先旋转），
-    // 在 pointerdown 时按真实渲染矩阵重新测量
-    this.stickInv = { a: 1, b: 0, c: 0, d: 1 };
+    // 摇杆本地坐标轴在屏幕上的实际方向（由四个方向标记实测得出），
+    // 在 pointerdown 时重新测量；null 表示未测到，退化为直接映射
+    this.stickBasis = null;
 
     // 脉冲信号的上帧状态（跨来源统一做边沿检测）
     this._prev = {
@@ -194,7 +194,7 @@ export class InputManager {
       const r = el.getBoundingClientRect();
       this.stickCenter = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
       this.stickRadius = Math.max(1, Math.min(r.width, r.height) * 0.34);
-      this.stickInv = this._measureStickInverse(el);
+      this.stickBasis = this._measureStickBasis(el);
       el.classList.add('active');
       this._stickMove(e.clientX, e.clientY);
     });
@@ -216,29 +216,33 @@ export class InputManager {
     el.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
-  // 测出「屏幕坐标 → 摇杆本地坐标」的逆变换线性部分。
-  // 竖屏时 .game-container 被 CSS rotate(90deg) 旋转，触摸的 clientX/clientY 是
-  // 屏幕坐标，而摇杆绘制在容器本地坐标系里，必须先逆变换，否则方向整体错位 90°。
-  // 这里不再用 matchMedia 猜（它和 CSS 实际是否旋转并不保证同步），
-  // 而是把从元素到根节点的真实变换矩阵乘起来再求逆，旋转多少度都自动正确。
-  _measureStickInverse(el) {
-    const identity = { a: 1, b: 0, c: 0, d: 1 };
-    if (typeof DOMMatrix === 'undefined' || typeof getComputedStyle === 'undefined') {
-      return identity;
-    }
-    let acc = null;
-    let node = el;
-    while (node && node.nodeType === 1) {
-      const t = getComputedStyle(node).transform;
-      if (t && t !== 'none') {
-        const m = new DOMMatrix(t);
-        acc = acc ? m.multiply(acc) : m;   // 祖先在左侧：M_root * ... * M_self
-      }
-      node = node.parentElement;
-    }
-    if (!acc) return identity;
-    const inv = acc.inverse();
-    return { a: inv.a, b: inv.b, c: inv.c, d: inv.d };
+  // 实测「摇杆本地坐标轴」在屏幕上的实际方向。
+  // 竖屏时 .game-container 被 CSS rotate(90deg) 整体旋转，触摸的 clientX/clientY
+  // 是屏幕坐标，而摇杆画在容器本地坐标系里，不做换算方向就会整体错位 90°。
+  //
+  // 这里不依赖 DOMMatrix / 变换矩阵字符串解析（部分手机浏览器不支持，会静默退化成
+  // 单位矩阵，反而导致横屏也错位），而是直接量四个方向标记的屏幕几何位置：
+  // 标记本身就画在本地 +up / +right 方向上，量出它们的屏幕方向就等于拿到了坐标轴。
+  _measureStickBasis(el) {
+    const centerOf = (node) => {
+      const r = node.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    };
+    const anchor = el.querySelector('.tc-stick-base') || el;
+    const upEl = el.querySelector('.tc-stick-mark.m-up');
+    const rightEl = el.querySelector('.tc-stick-mark.m-right');
+    if (!upEl || !rightEl) return null;
+
+    const c = centerOf(anchor);
+    const u = centerOf(upEl);
+    const g = centerOf(rightEl);
+    const ux = u.x - c.x, uy = u.y - c.y;   // 本地 +up 在屏幕上的方向
+    const rx = g.x - c.x, ry = g.y - c.y;   // 本地 +right 在屏幕上的方向
+    const ul = Math.hypot(ux, uy);
+    const rl = Math.hypot(rx, ry);
+    if (ul < 1e-3 || rl < 1e-3) return null;
+
+    return { ux: ux / ul, uy: uy / ul, rx: rx / rl, ry: ry / rl };
   }
 
   _stickMove(clientX, clientY) {
@@ -247,10 +251,14 @@ export class InputManager {
     const dx = clientX - c.x;
     const dy = clientY - c.y;
 
-    // 逆变换（只对方向增量生效，平移分量与此无关）
-    const inv = this.stickInv;
-    const lx = inv.a * dx + inv.c * dy;
-    const ly = inv.b * dx + inv.d * dy;
+    // 把屏幕位移投影到实测的本地坐标轴上，得到摇杆本地位移
+    let lx = dx;
+    let ly = dy;
+    const b = this.stickBasis;
+    if (b) {
+      lx = dx * b.rx + dy * b.ry;          // 投影到本地 +right 轴
+      ly = -(dx * b.ux + dy * b.uy);       // 投影到本地 +down 轴（= -up）
+    }
 
     const len = Math.hypot(lx, ly);
     const clamped = Math.min(len, R);
