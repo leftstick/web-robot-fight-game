@@ -85,11 +85,11 @@ export const GameConfig = {
   // 近战武器（刀）
   MELEE: {
     damage: 3,              // 劈砍伤害
-    cooldown: 340,          // 劈砍冷却(ms)
+    cooldown: 250,          // 劈砍冷却(ms)
     range: 42,              // 前方攻击距离
     height: 50,             // 攻击垂直范围
-    windupTime: 150,        // 举起阶段时长(ms)
-    swingTime: 150,         // 落下阶段时长(ms)
+    windupTime: 125,        // 举起阶段时长(ms)
+    swingTime: 125,         // 落下阶段时长(ms)
     autoSwitchDist: 68,     // 距离敌人多近时自动切刀
   },
 
