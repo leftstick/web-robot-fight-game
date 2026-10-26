@@ -56,6 +56,20 @@ export const ASSETS = {
   },
 };
 
+// 掩体原生尺寸（480x270 逻辑空间，1px 网格）
+// 精灵帧为 96x64，美术以底部中心锚定；这里的尺寸只用于碰撞与摆放。
+export const COVER_TYPES = ['barrier', 'oildrum', 'crate', 'trash', 'car', 'vending', 'sandbags'];
+
+export const COVER_INFO = {
+  barrier: { w: 44, h: 26 },
+  oildrum: { w: 22, h: 30 },
+  crate: { w: 30, h: 26 },
+  trash: { w: 24, h: 30 },
+  car: { w: 88, h: 34 },
+  vending: { w: 28, h: 42 },
+  sandbags: { w: 46, h: 20 },
+};
+
 // 视差滚动系数（对应各层）
 export const PARALLAX = {
   sky: 0.05,

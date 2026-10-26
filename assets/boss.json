@@ -1,498 +1,498 @@
 {
   "frames": [
     {
-      "filename": "idle_0",
+      "filename": "boss_0.png",
       "frame": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "idle_1",
+      "filename": "boss_1.png",
       "frame": {
-        "x": 96,
+        "x": 112,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "idle_2",
+      "filename": "boss_2.png",
       "frame": {
-        "x": 192,
+        "x": 224,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "idle_3",
+      "filename": "boss_3.png",
       "frame": {
-        "x": 288,
+        "x": 336,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "walk_4",
+      "filename": "boss_4.png",
       "frame": {
-        "x": 384,
+        "x": 448,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "walk_5",
+      "filename": "boss_5.png",
       "frame": {
-        "x": 480,
+        "x": 560,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "walk_6",
-      "frame": {
-        "x": 576,
-        "y": 0,
-        "w": 96,
-        "h": 96
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 96,
-        "h": 96
-      },
-      "sourceSize": {
-        "w": 96,
-        "h": 96
-      },
-      "duration": 100
-    },
-    {
-      "filename": "walk_7",
+      "filename": "boss_6.png",
       "frame": {
         "x": 672,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "gatling_8",
+      "filename": "boss_7.png",
       "frame": {
-        "x": 768,
+        "x": 784,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "gatling_9",
+      "filename": "boss_8.png",
       "frame": {
-        "x": 864,
+        "x": 896,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "gatling_10",
+      "filename": "boss_9.png",
       "frame": {
-        "x": 960,
+        "x": 1008,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "gatling_11",
+      "filename": "boss_10.png",
       "frame": {
-        "x": 1056,
+        "x": 1120,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "charge_12",
+      "filename": "boss_11.png",
       "frame": {
-        "x": 1152,
+        "x": 1232,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "charge_13",
-      "frame": {
-        "x": 1248,
-        "y": 0,
-        "w": 96,
-        "h": 96
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 96,
-        "h": 96
-      },
-      "sourceSize": {
-        "w": 96,
-        "h": 96
-      },
-      "duration": 100
-    },
-    {
-      "filename": "hurt_14",
+      "filename": "boss_12.png",
       "frame": {
         "x": 1344,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "hurt_15",
+      "filename": "boss_13.png",
       "frame": {
-        "x": 1440,
+        "x": 1456,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "death_16",
+      "filename": "boss_14.png",
       "frame": {
-        "x": 1536,
+        "x": 1568,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "death_17",
+      "filename": "boss_15.png",
       "frame": {
-        "x": 1632,
+        "x": 1680,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "death_18",
+      "filename": "boss_16.png",
       "frame": {
-        "x": 1728,
+        "x": 1792,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "death_19",
+      "filename": "boss_17.png",
       "frame": {
-        "x": 1824,
+        "x": 1904,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     },
     {
-      "filename": "death_20",
-      "frame": {
-        "x": 1920,
-        "y": 0,
-        "w": 96,
-        "h": 96
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 96,
-        "h": 96
-      },
-      "sourceSize": {
-        "w": 96,
-        "h": 96
-      },
-      "duration": 100
-    },
-    {
-      "filename": "death_21",
+      "filename": "boss_18.png",
       "frame": {
         "x": 2016,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
       },
       "sourceSize": {
-        "w": 96,
-        "h": 96
+        "w": 112,
+        "h": 112
+      },
+      "duration": 100
+    },
+    {
+      "filename": "boss_19.png",
+      "frame": {
+        "x": 2128,
+        "y": 0,
+        "w": 112,
+        "h": 112
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 112,
+        "h": 112
+      },
+      "sourceSize": {
+        "w": 112,
+        "h": 112
+      },
+      "duration": 100
+    },
+    {
+      "filename": "boss_20.png",
+      "frame": {
+        "x": 2240,
+        "y": 0,
+        "w": 112,
+        "h": 112
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 112,
+        "h": 112
+      },
+      "sourceSize": {
+        "w": 112,
+        "h": 112
+      },
+      "duration": 100
+    },
+    {
+      "filename": "boss_21.png",
+      "frame": {
+        "x": 2352,
+        "y": 0,
+        "w": 112,
+        "h": 112
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 112,
+        "h": 112
+      },
+      "sourceSize": {
+        "w": 112,
+        "h": 112
       },
       "duration": 100
     }
   ],
   "meta": {
-    "app": "neon-huntdown-build",
-    "version": "1.0",
+    "app": "neon-huntdown-build-v2",
+    "version": "2.0",
     "image": "",
     "format": "RGBA8888",
     "size": {
-      "w": 2112,
-      "h": 96
+      "w": 2464,
+      "h": 112
     },
     "scale": "1",
     "frameTags": [

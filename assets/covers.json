@@ -1,7 +1,7 @@
 {
   "frames": [
     {
-      "filename": "barrier_0",
+      "filename": "cover_0.png",
       "frame": {
         "x": 0,
         "y": 0,
@@ -23,7 +23,7 @@
       "duration": 100
     },
     {
-      "filename": "oildrum_0",
+      "filename": "cover_1.png",
       "frame": {
         "x": 96,
         "y": 0,
@@ -45,7 +45,7 @@
       "duration": 100
     },
     {
-      "filename": "crate_0",
+      "filename": "cover_2.png",
       "frame": {
         "x": 192,
         "y": 0,
@@ -67,7 +67,7 @@
       "duration": 100
     },
     {
-      "filename": "trash_0",
+      "filename": "cover_3.png",
       "frame": {
         "x": 288,
         "y": 0,
@@ -89,7 +89,7 @@
       "duration": 100
     },
     {
-      "filename": "car_0",
+      "filename": "cover_4.png",
       "frame": {
         "x": 384,
         "y": 0,
@@ -111,7 +111,7 @@
       "duration": 100
     },
     {
-      "filename": "vending_0",
+      "filename": "cover_5.png",
       "frame": {
         "x": 480,
         "y": 0,
@@ -133,7 +133,7 @@
       "duration": 100
     },
     {
-      "filename": "sandbags_0",
+      "filename": "cover_6.png",
       "frame": {
         "x": 576,
         "y": 0,
@@ -155,7 +155,7 @@
       "duration": 100
     },
     {
-      "filename": "barrier_1",
+      "filename": "cover_7.png",
       "frame": {
         "x": 672,
         "y": 0,
@@ -177,7 +177,7 @@
       "duration": 100
     },
     {
-      "filename": "oildrum_1",
+      "filename": "cover_8.png",
       "frame": {
         "x": 768,
         "y": 0,
@@ -199,7 +199,7 @@
       "duration": 100
     },
     {
-      "filename": "crate_1",
+      "filename": "cover_9.png",
       "frame": {
         "x": 864,
         "y": 0,
@@ -221,7 +221,7 @@
       "duration": 100
     },
     {
-      "filename": "trash_1",
+      "filename": "cover_10.png",
       "frame": {
         "x": 960,
         "y": 0,
@@ -243,7 +243,7 @@
       "duration": 100
     },
     {
-      "filename": "car_1",
+      "filename": "cover_11.png",
       "frame": {
         "x": 1056,
         "y": 0,
@@ -265,7 +265,7 @@
       "duration": 100
     },
     {
-      "filename": "vending_1",
+      "filename": "cover_12.png",
       "frame": {
         "x": 1152,
         "y": 0,
@@ -287,7 +287,7 @@
       "duration": 100
     },
     {
-      "filename": "sandbags_1",
+      "filename": "cover_13.png",
       "frame": {
         "x": 1248,
         "y": 0,
@@ -309,7 +309,7 @@
       "duration": 100
     },
     {
-      "filename": "barrier_2",
+      "filename": "cover_14.png",
       "frame": {
         "x": 1344,
         "y": 0,
@@ -331,7 +331,7 @@
       "duration": 100
     },
     {
-      "filename": "oildrum_2",
+      "filename": "cover_15.png",
       "frame": {
         "x": 1440,
         "y": 0,
@@ -353,7 +353,7 @@
       "duration": 100
     },
     {
-      "filename": "crate_2",
+      "filename": "cover_16.png",
       "frame": {
         "x": 1536,
         "y": 0,
@@ -375,7 +375,7 @@
       "duration": 100
     },
     {
-      "filename": "trash_2",
+      "filename": "cover_17.png",
       "frame": {
         "x": 1632,
         "y": 0,
@@ -397,7 +397,7 @@
       "duration": 100
     },
     {
-      "filename": "car_2",
+      "filename": "cover_18.png",
       "frame": {
         "x": 1728,
         "y": 0,
@@ -419,7 +419,7 @@
       "duration": 100
     },
     {
-      "filename": "vending_2",
+      "filename": "cover_19.png",
       "frame": {
         "x": 1824,
         "y": 0,
@@ -441,7 +441,7 @@
       "duration": 100
     },
     {
-      "filename": "sandbags_2",
+      "filename": "cover_20.png",
       "frame": {
         "x": 1920,
         "y": 0,
@@ -464,8 +464,8 @@
     }
   ],
   "meta": {
-    "app": "neon-huntdown-build",
-    "version": "1.0",
+    "app": "neon-huntdown-build-v2",
+    "version": "2.0",
     "image": "",
     "format": "RGBA8888",
     "size": {

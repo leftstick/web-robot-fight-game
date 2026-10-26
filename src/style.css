@@ -80,16 +80,17 @@ body::before {
 
 .game-container {
   position: relative;
-  width: 100%;
-  height: 100%;
-  max-width: 1280px;
-  max-height: 720px;
+  width: min(100vw, calc(100dvh * 16 / 9));
+  height: min(100dvh, calc(100vw * 9 / 16));
+  max-width: 1440px;
+  max-height: 810px;
   aspect-ratio: 16 / 9;
-  border: 2px solid var(--primary-color);
-  border-radius: 4px;
-  box-shadow: 
-    0 0 20px rgba(0, 212, 255, 0.3),
-    inset 0 0 20px rgba(0, 212, 255, 0.1);
+  background: #000;
+  border: 1px solid #162434;
+  border-radius: 0;
+  box-shadow:
+    0 0 70px rgba(0, 212, 255, 0.10),
+    0 10px 40px rgba(0, 0, 0, 0.7);
   overflow: hidden;
 }
 
@@ -99,6 +100,8 @@ body::before {
   height: 100%;
   background: #000;
   touch-action: none;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 /* 手机虚拟按键层：默认隐藏，触屏设备（或 ?touch=1）启用 */
@@ -653,46 +656,69 @@ body::before {
   color: var(--text-muted);
 }
 
-/* HUD */
+/* HUD：两侧独立金属面板，中间留空给 BOSS 血条 */
 .hud {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  padding: 10px 14px;
+  padding: 8px 12px;
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  background: linear-gradient(180deg, rgba(10, 22, 40, 0.9) 0%, transparent 100%);
+  align-items: flex-start;
+  background: none;
   z-index: 5;
   pointer-events: none;
-  padding-top: max(10px, env(safe-area-inset-top));
+  padding-top: max(8px, env(safe-area-inset-top));
 }
 
 .hud-left, .hud-right {
   display: flex;
-  gap: 16px;
+  gap: 14px;
   align-items: center;
+  padding: 5px 12px 6px;
+  background: linear-gradient(180deg, rgba(5, 11, 19, 0.88) 0%, rgba(5, 11, 19, 0.34) 100%);
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.hud-left {
+  border-left: 2px solid #ff2e88;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%);
+}
+
+.hud-right {
+  border-right: 2px solid #00e5ff;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 6px 100%, 0 calc(100% - 6px));
 }
 
 .hud-item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+  min-width: 34px;
 }
 
 .hud-label {
-  font-size: 10px;
-  color: var(--text-muted);
+  font-size: 8px;
+  color: #6f839b;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
+  line-height: 1;
 }
 
 .hud-value {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
-  color: var(--primary-color);
-  text-shadow: var(--glow-primary);
+  line-height: 1.05;
+  color: #aef4ff;
+  text-shadow: 0 0 10px rgba(0, 212, 255, 0.55);
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-left .hud-item:nth-child(2) .hud-value {
+  color: #ffe066;
+  text-shadow: 0 0 10px rgba(255, 224, 102, 0.45);
 }
 
 .lives-container {
@@ -700,33 +726,34 @@ body::before {
   gap: 3px;
   flex-wrap: wrap;
   max-width: 100px;
+  padding-top: 2px;
 }
 
 .life-icon {
-  width: 12px;
-  height: 12px;
-  background: var(--danger-color);
-  clip-path: polygon(50% 0%, 100% 35%, 80% 100%, 20% 100%, 0% 35%);
-  box-shadow: var(--glow-danger);
+  width: 10px;
+  height: 11px;
+  background: #ff2e58;
+  clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+  box-shadow: 0 0 8px rgba(255, 46, 88, 0.65);
 }
 
 .life-icon.empty {
-  background: var(--text-muted);
+  background: #334052;
   box-shadow: none;
-  opacity: 0.3;
+  opacity: 0.4;
 }
 
 .pause-btn {
-  width: 36px;
-  height: 36px;
-  border: 2px solid var(--primary-color);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--primary-color);
-  font-size: 16px;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(0, 229, 255, 0.55);
+  border-radius: 2px;
+  background: rgba(0, 229, 255, 0.06);
+  color: #7fe9ff;
+  font-size: 13px;
   cursor: pointer;
   pointer-events: auto;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -734,6 +761,7 @@ body::before {
 
 .pause-btn:hover {
   background: rgba(0, 212, 255, 0.2);
+  box-shadow: 0 0 14px rgba(0, 212, 255, 0.4);
 }
 
 .pause-screen {

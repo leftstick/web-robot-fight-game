@@ -10,6 +10,10 @@ function aabb(a, b) {
          a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
+function clamp01(v) {
+  return v < 0 ? 0 : (v > 1 ? 1 : v);
+}
+
 // 玩家：有重力 vy / gravity / onGround，y 由重力 + 平台碰撞决定。
 export class Player {
   constructor(spawnX) {
@@ -187,8 +191,16 @@ export class Player {
   }
 
   getGunHeight() {
-    // 精灵 64px，碰撞盒 56px，枪口位于 sprite 内约 y+28 处
-    return 20;
+    // 与 1px 精灵里的枪管对齐：站立 27、蹲伏 15（相对碰撞盒顶部）
+    return this.crouching ? 15 : 27;
+  }
+
+  getMuzzle() {
+    const offset = this.crouching ? 22 : 24;
+    return {
+      x: this.getCenterX() + this.facing * offset,
+      y: this.y + this.getGunHeight(),
+    };
   }
 
   getWeapon() {
@@ -198,11 +210,9 @@ export class Player {
 
   createBullet() {
     const w = this.getWeapon();
-    const gy = this.y + this.getGunHeight();
-    const x = this.facing > 0
-      ? this.x + this.width
-      : this.x - P.bulletWidth;
-    return new Bullet(x, gy - P.bulletHeight / 2, (w.bulletSpeed || P.bulletSpeed) * this.facing, 0, {
+    const muzzle = this.getMuzzle();
+    const x = this.facing > 0 ? muzzle.x : muzzle.x - P.bulletWidth;
+    return new Bullet(x, muzzle.y - P.bulletHeight / 2, (w.bulletSpeed || P.bulletSpeed) * this.facing, 0, {
       width: P.bulletWidth,
       height: P.bulletHeight,
       damage: w.bulletDamage || P.bulletDamage,
@@ -283,14 +293,17 @@ export class Player {
       const idx = Math.min(f.length - 1, Math.floor(this.deathTime / 70));
       return f[idx];
     }
+    // 近战姿态：帧 33/34 举刀，35-37 落刀，38 收势（持刀待机）
+    if (this.meleePhase !== 'idle') {
+      return ANIM.PLAYER_MELEE[this.getMeleeFrameIndex(currentTime)];
+    }
+    if (this.meleeMode && !this.crouching) {
+      return ANIM.PLAYER_MELEE[5];
+    }
     if (!this.onGround) {
       const f = ANIM.PLAYER_JUMP;
       const idx = this.vy < 0 ? 0 : (this.vy > 4 ? 2 : 1);
       return f[idx];
-    }
-    if (this.meleePhase !== 'idle') {
-      // 劈砍中：用 idle 第一帧作为身体基础，刀由 draw 单独绘制
-      return ANIM.PLAYER_IDLE[0];
     }
     if (this.crouching) {
       if (currentTime < this.shootAnimUntil) {
@@ -318,10 +331,40 @@ export class Player {
     return f[Math.floor(this.animTime / 20) % f.length];
   }
 
+  getMeleeFrameIndex(currentTime) {
+    const m = GameConfig.MELEE;
+    if (this.meleePhase === 'windup') {
+      const k = clamp01((currentTime - this.lastMelee) / m.windupTime);
+      return k < 0.5 ? 0 : 1;
+    }
+    if (this.meleePhase === 'swing') {
+      const k = clamp01((currentTime - this.lastMelee - m.windupTime) / m.swingTime);
+      return 2 + Math.min(2, Math.floor(k * 3));
+    }
+    return 5;
+  }
+
+  // 0/1/2 = 举刀，3/4/5 = 落刀，6 = 持刀待机
+  getBladePose(currentTime) {
+    const m = GameConfig.MELEE;
+    if (this.meleePhase === 'windup') {
+      const k = clamp01((currentTime - this.lastMelee) / m.windupTime);
+      if (k < 0.45) return 0;
+      if (k < 0.8) return 1;
+      return 2;
+    }
+    if (this.meleePhase === 'swing') {
+      const k = clamp01((currentTime - this.lastMelee - m.windupTime) / m.swingTime);
+      return 3 + Math.min(2, Math.floor(k * 3));
+    }
+    return 6;
+  }
+
   draw(ctx, currentTime, cameraX) {
     const sprites = getSprites();
     const frame = this.pickFrame(currentTime);
     const cx = this.getCenterX();
+    const feet = this.y + this.height;
 
     ctx.save();
     if (this.isInvincibleNow(currentTime) &&
@@ -329,14 +372,18 @@ export class Player {
       ctx.globalAlpha = 0.45;
     }
 
-    // 落地/行走扬起的微弱影子（不画发光圆球角色）
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath();
-    ctx.ellipse(cx, this.y + this.height - 2, this.width * 0.5, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
+    // 像素化落地阴影（不用抗锯齿椭圆）
+    ctx.fillStyle = 'rgba(0,0,0,0.40)';
+    ctx.fillRect(Math.round(cx) - 7, Math.round(feet) - 2, 14, 2);
+    ctx.fillRect(Math.round(cx) - 5, Math.round(feet) - 4, 10, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.24)';
+    ctx.fillRect(Math.round(cx) - 3, Math.round(feet) - 5, 6, 1);
 
     const recoil = currentTime < this.shootAnimUntil ? -this.facing * 2 : 0;
-    sprites.player.draw(ctx, frame, cx + recoil, this.y + this.height, this.facing);
+    // 环境霓虹边缘光：左青右粉，让角色从暗背景里“剥”出来
+    sprites.player.drawTint(ctx, frame, cx + recoil - 1, feet, this.facing, '#00e5ff', 0.28);
+    sprites.player.drawTint(ctx, frame, cx + recoil + 1, feet, this.facing, '#ff2e88', 0.15);
+    sprites.player.draw(ctx, frame, cx + recoil, feet, this.facing);
 
     // —— 绘制刀（持刀模式或劈砍中）——
     if (this.meleeMode || this.meleePhase !== 'idle') {
@@ -346,78 +393,97 @@ export class Player {
     ctx.restore();
   }
 
-  // 绘制刀和劈砍效果
+  // 1px 像素刀：不用 rotate/arc，避免旋转抗锯齿破坏像素网格
   drawBlade(ctx, currentTime) {
     const m = GameConfig.MELEE;
     const cx = this.getCenterX();
-    const handX = cx + this.facing * 5;
-    const handY = this.y + this.height * 0.38;
+    const feet = this.y + this.height;
+    const facing = this.facing;
+    const pose = this.getBladePose(currentTime);
 
-    // 计算刀的角度（弧度，0 = 水平朝前）
-    let angle;
-    let showSlash = false;
-    if (this.meleePhase === 'windup') {
-      // 举起阶段：刀从身侧举到头顶
-      const t = (currentTime - this.lastMelee) / m.windupTime;
-      angle = -20 + (-120 - (-20)) * Math.min(1, t);  // -20° -> -120°
-    } else if (this.meleePhase === 'swing') {
-      // 落下阶段：刀从头顶划到下方
-      const t = (currentTime - this.lastMelee - m.windupTime) / m.swingTime;
-      angle = -120 + (50 - (-120)) * Math.min(1, t);  // -120° -> 50°
-      showSlash = t > 0.15 && t < 0.85;
-    } else {
-      // 持刀待机：刀收在身侧
-      angle = this.facing > 0 ? -20 : 200;
+    // 本地坐标：x 向前为正，y 相对脚底向上为负
+    const POSES = [
+      { hand: [6, -48], base: [2, -55], tip: [-10, -70], grip: [10, -43] },
+      { hand: [7, -49], base: [8, -57], tip: [10, -78], grip: [6, -42] },
+      { hand: [13, -34], base: [8, -41], tip: [-8, -56], grip: [17, -27] },
+      { hand: [13, -32], base: [18, -32], tip: [45, -31], grip: [7, -34] },
+      { hand: [13, -31], base: [17, -28], tip: [39, -8], grip: [9, -34] },
+      { hand: [12, -30], base: [16, -24], tip: [29, 1], grip: [8, -36] },
+      { hand: [12, -32], base: [15, -26], tip: [22, -9], grip: [9, -38] },
+    ];
+    const p = POSES[pose] || POSES[6];
+
+    const screenX = (lx) => Math.round(cx + facing * lx);
+    const screenY = (ly) => Math.round(feet + ly);
+
+    const line = (a, b, color, size = 1) => {
+      const steps = Math.max(2, Math.ceil(Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])) * 2));
+      ctx.fillStyle = color;
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const lx = a[0] + (b[0] - a[0]) * t;
+        const ly = a[1] + (b[1] - a[1]) * t;
+        ctx.fillRect(screenX(lx) - (size >> 1), screenY(ly) - (size >> 1), size, size);
+      }
+    };
+
+    // 落下阶段的像素刀光：三段同心弧，越靠外越淡
+    if (this.meleePhase === 'swing') {
+      const k = clamp01((currentTime - this.lastMelee - m.windupTime) / m.swingTime);
+      const alpha = Math.sin(Math.PI * k);
+      if (alpha > 0.02) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const originY = feet - 34;
+        for (let ring = 0; ring < 3; ring++) {
+          const r = 25 + ring * 6;
+          ctx.globalAlpha = alpha * (0.34 - ring * 0.08);
+          ctx.fillStyle = ring === 1 ? '#d9ffff' : '#45eeff';
+          const a0 = -1.05;
+          const a1 = -1.05 + 1.9 * Math.min(1, k * 1.15);
+          for (let i = 0; i <= 22; i++) {
+            const a = a0 + (a1 - a0) * (i / 22);
+            const lx = Math.cos(a) * r;
+            const ly = Math.sin(a) * r;
+            ctx.fillRect(Math.round(cx + facing * lx), Math.round(originY + ly), 1, 1);
+          }
+        }
+        ctx.restore();
+      }
     }
 
-    const rad = (angle * Math.PI) / 180;
-    const bladeLen = 30;
-    const bladeW = 3;
-    const handleLen = 7;
-    const handleW = 4;
+    // 刀柄（深色描边 + 棕色内芯 + 高光）
+    line(p.hand, p.grip, '#07090e', 3);
+    line(p.hand, p.grip, '#5a3418', 1);
+    line(p.hand, [p.grip[0], p.grip[1] - 1], '#8a5a2a', 1);
 
-    ctx.save();
-    ctx.translate(handX, handY);
-    ctx.rotate(rad * (this.facing > 0 ? 1 : -1));
+    // 护手：沿刀身轴线的垂直方向
+    const ax = p.tip[0] - p.base[0];
+    const ay = p.tip[1] - p.base[1];
+    const len = Math.hypot(ax, ay) || 1;
+    const px = -ay / len;
+    const py = ax / len;
+    line(
+      [p.base[0] - px * 3, p.base[1] - py * 3],
+      [p.base[0] + px * 3, p.base[1] + py * 3],
+      '#8b96a8', 1,
+    );
+    ctx.fillStyle = '#d6dfeb';
+    ctx.fillRect(screenX(p.base[0]) - 1, screenY(p.base[1]) - 1, 2, 2);
 
-    // 刀柄
-    ctx.fillStyle = '#5a3a1a';
-    ctx.fillRect(0, -handleW / 2, handleLen, handleW);
-    // 护手
-    ctx.fillStyle = '#c0c0c0';
-    ctx.fillRect(handleLen - 1, -handleW, 3, handleW * 2);
-    // 刀身
-    ctx.fillStyle = '#e8e8f0';
-    ctx.fillRect(handleLen + 2, -bladeW / 2, bladeLen, bladeW);
-    // 刀身高光
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.fillRect(handleLen + 2, -bladeW / 2, bladeLen, 1);
-    // 刀尖
-    ctx.fillStyle = '#e8e8f0';
-    ctx.beginPath();
-    ctx.moveTo(handleLen + 2 + bladeLen, -bladeW / 2);
-    ctx.lineTo(handleLen + 2 + bladeLen + 4, 0);
-    ctx.lineTo(handleLen + 2 + bladeLen, bladeW / 2);
-    ctx.fill();
-
-    // 劈砍刀光（落下阶段）
-    if (showSlash) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = 0.7;
-      const grad = ctx.createLinearGradient(0, 0, bladeLen + 12, 0);
-      grad.addColorStop(0, 'rgba(0,229,255,0)');
-      grad.addColorStop(0.5, 'rgba(0,229,255,0.8)');
-      grad.addColorStop(1, 'rgba(255,255,255,0.9)');
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = 4;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.arc(0, 0, bladeLen + 6, -0.5, 0.5);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    ctx.restore();
+    // 刀身：3px 暗描边 + 1px 亮钢 + 1px 白高光
+    line(p.base, p.tip, '#07090e', 3);
+    line(p.base, p.tip, '#d9e6f2', 1);
+    const mid = [p.base[0] + ax * 0.62, p.base[1] + ay * 0.62];
+    const hiOff = [px * 0.9, py * 0.9];
+    line(
+      [p.base[0] + hiOff[0], p.base[1] + hiOff[1]],
+      [mid[0] + hiOff[0], mid[1] + hiOff[1]],
+      'rgba(255,255,255,0.9)', 1,
+    );
+    ctx.fillStyle = '#eaffff';
+    ctx.fillRect(screenX(p.tip[0]) - 1, screenY(p.tip[1]) - 1, 2, 2);
+    ctx.fillStyle = '#45eeff';
+    ctx.fillRect(screenX(mid[0]), screenY(mid[1]), 1, 1);
   }
 }

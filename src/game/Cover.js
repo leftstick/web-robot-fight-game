@@ -1,33 +1,36 @@
-import { GameConfig } from '../config/gameConfig.js';
+import { COVER_TYPES, COVER_INFO } from '../config/assets.js';
 import { getSprites } from './SpriteSheet.js';
 
 // 掩体：7 种道具，每种 3 个破坏阶段（完好/受损/破碎）。
-// 视觉使用 covers.png 精灵图，底部对齐。
-const COVER_TYPES = ['barrier', 'oildrum', 'crate', 'trash', 'car', 'vending', 'sandbags'];
-const COVER_COLS = 7;
-const STAGE_FRAMES = 3;
+// 精灵帧固定 96x64，美术底部中心锚定；物理尺寸用 COVER_INFO 的原生尺寸，
+// 不再把 96x64 的帧按碰撞盒拉伸，避免油桶变扁、汽车拉长。
+const COVER_COLS = COVER_TYPES.length;
 
-// 根据尺寸推断类型（兼容未指定 type 的旧关卡数据）
 function inferType(w, h) {
-  if (h >= 28 && w >= 60) return 'car';
-  if (h >= 26) return 'crate';
-  if (w >= 50) return 'sandbags';
-  return 'barrier';
+  if (h >= 32) return 'car';
+  if (w >= 40) return 'sandbags';
+  if (h >= 28) return 'vending';
+  return 'crate';
 }
 
 export class Cover {
   constructor(x, y, w, h, hp, destructible, type) {
+    this.type = COVER_INFO[type] ? type : inferType(w, h);
+    this.typeIndex = COVER_TYPES.indexOf(this.type);
+    if (this.typeIndex < 0) this.typeIndex = 0;
+
+    const info = COVER_INFO[this.type];
+    this.w = w || info.w;
+    this.h = h || info.h;
     this.x = x;
-    this.y = y;
-    this.w = w;
-    this.h = h;
+    // 统一贴地：不管关卡数据怎么写 y，掩体底部都落在地面。
+    this.y = y != null ? y : (235 - this.h);
+
     this.maxHp = hp;
     this.hp = hp;
     this.destructible = destructible !== false;
     this.hitFlash = 0;
-    this.type = type || inferType(w, h);
-    this.typeIndex = COVER_TYPES.indexOf(this.type);
-    if (this.typeIndex < 0) this.typeIndex = 0;
+    this.claimedBy = null;
   }
 
   getBounds() {
@@ -62,51 +65,23 @@ export class Cover {
   }
 
   draw(ctx) {
-    const sprites = getSprites();
-    const sheet = sprites.covers;
-    const stage = this.getStage();
-
-    // 破碎后不绘制（或绘制残块）
-    if (stage >= 2) {
-      // 绘制破碎残块帧
-      if (sheet) {
-        const frame = 2 * COVER_COLS + this.typeIndex;
-        sheet.drawFrame(ctx, frame, this.x, this.y, this.w, this.h);
-      }
+    const sheet = getSprites().covers;
+    if (!sheet) {
+      this._drawFallback(ctx);
       return;
     }
 
-    if (sheet) {
-      const frame = stage * COVER_COLS + this.typeIndex;
-      const fw = sheet.frameW;
-      const fh = sheet.frameH;
-      // 宽型掩体（车/路障/沙袋）按宽度缩放，高型（油桶/垃圾桶/售货机）按高度缩放
-      const wideTypes = ['car', 'barrier', 'sandbags'];
-      const isWide = wideTypes.includes(this.type);
-      let scale;
-      if (isWide) {
-        scale = this.w / fw;
-      } else {
-        scale = this.h / fh;
-      }
-      const drawW = fw * scale;
-      const drawH = fh * scale;
-      const drawX = this.x + (this.w - drawW) / 2;
-      const drawY = this.y + this.h - drawH; // 底部对齐
-      ctx.save();
-      if (this.hitFlash > 0) {
-        ctx.globalAlpha = 0.85;
-      }
-      sheet.drawFrame(ctx, frame, drawX, drawY, drawW, drawH);
-      if (this.hitFlash > 0) {
-        ctx.globalCompositeOperation = 'source-atop';
-        ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        ctx.fillRect(drawX, drawY, drawW, drawH);
-      }
-      ctx.restore();
-    } else {
-      // 回退：程序化绘制
-      this._drawFallback(ctx);
+    const stage = this.getStage();
+    const frame = stage * COVER_COLS + this.typeIndex;
+    const fw = sheet.frameW;
+    const fh = sheet.frameH;
+    // 1:1 原生像素绘制，底部中心锚定。96x64 帧四周是透明留白。
+    const dx = Math.round(this.x + this.w / 2 - fw / 2);
+    const dy = Math.round(this.y + this.h - fh);
+
+    sheet.drawFrame(ctx, frame, dx, dy, fw, fh);
+    if (this.hitFlash > 0 && stage < 2) {
+      sheet.drawFrameFlash(ctx, frame, dx, dy, fw, fh, 0.65);
     }
   }
 

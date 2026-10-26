@@ -1,9 +1,31 @@
 import { GameConfig } from '../config/gameConfig.js';
+import { COVER_TYPES, COVER_INFO } from '../config/assets.js';
 import { Cover } from './Cover.js';
 
 // 关卡数据外置为 JSON（便于后续换成 Tiled 导出格式）。
 // JSON 数据以 960x540 基准编写，加载时按 0.5 缩放到 480x270 逻辑空间。
 const SCALE = 0.5;
+
+// 掩体使用画好的原生尺寸，位置按关卡里的中心点重新贴地摆放。
+function normalizeCovers(covers, posScale) {
+  return (covers || []).map((c, i) => {
+    const type = COVER_INFO[c.type]
+      ? c.type
+      : (!c.destructible ? 'car' : COVER_TYPES[i % COVER_TYPES.length]);
+    const info = COVER_INFO[type];
+    const sourceW = c.w || info.w;
+    const centerX = (c.x + sourceW / 2) * posScale;
+    return {
+      x: Math.round(centerX - info.w / 2),
+      y: GameConfig.GROUND_Y - info.h,
+      w: info.w,
+      h: info.h,
+      hp: c.hp,
+      destructible: c.destructible,
+      type,
+    };
+  });
+}
 
 const FALLBACK_LEVEL = {
   id: 1,
@@ -69,19 +91,7 @@ function scaleLevel(d) {
       x: Math.round(p.x * SCALE), y: Math.round(p.y * SCALE),
       w: Math.round(p.w * SCALE), h: Math.round(p.h * SCALE),
     })),
-    covers: (d.covers || []).map((c, i) => {
-      // 按位置/索引分配掩体类型，保证 7 种道具都有出场
-      const types = ['barrier', 'oildrum', 'crate', 'trash', 'car', 'vending', 'sandbags'];
-      const type = c.type || types[i % types.length];
-      return {
-        x: Math.round(c.x * SCALE),
-        y: Math.round(c.y * SCALE + (c.h * SCALE - c.h)),
-        w: c.w,
-        h: c.h,
-        hp: c.hp, destructible: c.destructible,
-        type,
-      };
-    }),
+    covers: normalizeCovers(d.covers, SCALE),
     enemies: (d.enemies || []).map(e => ({
       x: Math.round(e.x * SCALE),
       y: e.y != null ? Math.round(e.y * SCALE) : undefined,
@@ -100,7 +110,7 @@ export class Level {
       x: p.x, y: p.y, w: p.w, h: p.h,
     }));
 
-    this.covers = (data.covers || []).map(
+    this.covers = normalizeCovers(data.covers, 1).map(
       (c) => new Cover(c.x, c.y, c.w, c.h, c.hp, c.destructible, c.type),
     );
 

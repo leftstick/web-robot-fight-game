@@ -16,6 +16,7 @@ export const ANIM = {
   PLAYER_JUMP: [20, 21, 22],
   PLAYER_HURT: [23, 24],
   PLAYER_DEATH: [25, 26, 27, 28, 29, 30, 31, 32],
+  PLAYER_MELEE: [33, 34, 35, 36, 37, 38],
   // 杂兵
   THUG_IDLE: [0, 1, 2, 3],
   THUG_WALK: [4, 5, 6, 7, 8, 9],
@@ -45,12 +46,15 @@ export const ANIM = {
 // SpriteSheet：加载 PNG + JSON，支持闪白（受击）版本
 // ============================================================
 export class SpriteSheet {
-  constructor(image, json, frameW, frameH) {
+  constructor(image, json, frameW, frameH, footOffset = 0) {
     this.image = image;
     this.json = json;
     this.frameW = frameW;
     this.frameH = frameH;
+    // 美术脚底在帧内并非正好贴底，绘制时向下补偿，保证踩在地面上。
+    this.footOffset = footOffset;
     this.flashCanvas = null;
+    this.tintCanvases = null;
   }
 
   // 生成白色闪版本（受击反馈），按需生成
@@ -67,11 +71,48 @@ export class SpriteSheet {
     this.flashCanvas = c;
   }
 
+  // 按颜色生成剪影缓存（用于霓虹边缘光）
+  _ensureTint(color) {
+    if (!this.tintCanvases) this.tintCanvases = new Map();
+    const hit = this.tintCanvases.get(color);
+    if (hit) return hit;
+    this._ensureFlash();
+    const c = document.createElement('canvas');
+    c.width = this.image.width;
+    c.height = this.image.height;
+    const tctx = c.getContext('2d');
+    tctx.drawImage(this.flashCanvas, 0, 0);
+    tctx.globalCompositeOperation = 'source-in';
+    tctx.fillStyle = color;
+    tctx.fillRect(0, 0, c.width, c.height);
+    this.tintCanvases.set(color, c);
+    return c;
+  }
+
+  // 边缘光：与环境霓虹同向的 1px 彩色轮廓，画在本体之前
+  drawTint(ctx, frame, centerX, bottomY, facing, color, alpha = 0.22) {
+    const src = this._ensureTint(color);
+    const x = Math.round(centerX - this.frameW / 2);
+    const y = Math.round(bottomY + this.footOffset - this.frameH);
+    const sx = frame * this.frameW;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.globalAlpha = alpha;
+    if (facing < 0) {
+      ctx.translate(x + this.frameW, y);
+      ctx.scale(-1, 1);
+      ctx.drawImage(src, sx, 0, this.frameW, this.frameH, 0, 0, this.frameW, this.frameH);
+    } else {
+      ctx.drawImage(src, sx, 0, this.frameW, this.frameH, x, y, this.frameW, this.frameH);
+    }
+    ctx.restore();
+  }
+
   // centerX: 水平中心, bottomY: 脚底 y（底部对齐）, facing: ±1, flash: 受击闪白
   draw(ctx, frame, centerX, bottomY, facing, flash) {
     const src = flash ? (this._ensureFlash(), this.flashCanvas) : this.image;
     const x = Math.round(centerX - this.frameW / 2);
-    const y = Math.round(bottomY - this.frameH);
+    const y = Math.round(bottomY + this.footOffset - this.frameH);
     const sx = frame * this.frameW;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
@@ -91,6 +132,17 @@ export class SpriteSheet {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(this.image, sx, 0, this.frameW, this.frameH, x, y, w, h);
+    ctx.restore();
+  }
+
+  // 白色剪影版本：只覆盖精灵本身，不会把整块矩形涂白。
+  drawFrameFlash(ctx, frame, x, y, w, h, alpha = 0.7) {
+    this._ensureFlash();
+    const sx = frame * this.frameW;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(this.flashCanvas, sx, 0, this.frameW, this.frameH, x, y, w, h);
     ctx.restore();
   }
 }
@@ -197,7 +249,8 @@ export class AssetLoader {
       } else {
         const fw = r.json.frames[0].frame.w;
         const fh = r.json.frames[0].frame.h;
-        cache.sprites[r.key] = new SpriteSheet(r.img, r.json, fw, fh);
+        const footOffsets = { player: 3, thug_mohawk: 4, thug_mask: 4, thug_bald: 4, boss: 1 };
+        cache.sprites[r.key] = new SpriteSheet(r.img, r.json, fw, fh, footOffsets[r.key] || 0);
       }
     }
 

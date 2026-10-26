@@ -29,6 +29,8 @@ class GameApp {
     this.gpWarn = document.getElementById('gpWarn');     // 非安全上下文警告
     this.gpPending = document.getElementById('gpPending'); // 待激活提示
     this.toastTimer = null;
+    this.padConnected = false;
+    this.padPromptAllowed = false;
 
     // 菜单导航：当前屏幕的可选项、选中下标（键盘/手柄共用同一套）
     this.menuScreen = null;
@@ -99,14 +101,25 @@ class GameApp {
   }
 
   onPadChange(connected, id) {
-    if (this.gpLegend) this.gpLegend.style.display = connected ? 'flex' : 'none';
-    // 连接成功后隐藏"待激活"提示；断开时重新显示（API 仍可用）
-    if (this.gpPending) this.gpPending.style.display = connected ? 'none' : 'flex';
+    this.padConnected = connected;
+    this.updatePadLegend();
     if (connected) {
       const name = (id || '').split(' ')[0] || '手柄';
       this.showPadToast(`🎮 ${name} 已连接`);
     } else {
       this.showPadToast('手柄已断开');
+    }
+  }
+
+  // 游戏中隐藏按键图例，避免挡住战斗画面；菜单/选关时再显示
+  updatePadLegend() {
+    const inGame = this.game.state === GameState.PLAYING || this.game.state === GameState.PAUSED;
+    if (this.gpLegend) {
+      this.gpLegend.style.display = this.padConnected && !inGame ? 'flex' : 'none';
+    }
+    // 进入战斗后不再提示“按键激活手柄”，避免压住画面
+    if (this.gpPending) {
+      this.gpPending.style.display = this.padPromptAllowed && !this.padConnected && !inGame ? 'flex' : 'none';
     }
   }
 
@@ -118,19 +131,22 @@ class GameApp {
 
     if (!apiSupported) {
       // 浏览器完全不支持 Gamepad API
+      this.padPromptAllowed = false;
       this.showPadToast('⚠ 当前浏览器不支持手柄');
       return;
     }
 
     if (!secure) {
       // 非安全上下文：Gamepad API 存在但不会返回真实手柄
+      this.padPromptAllowed = false;
       if (this.gpWarn) this.gpWarn.style.display = 'block';
       if (this.gpPending) this.gpPending.style.display = 'none';
       return;
     }
 
     // 安全上下文：API 可用，提示用户按任意键激活手柄
-    if (this.gpPending) this.gpPending.style.display = 'flex';
+    this.padPromptAllowed = true;
+    this.updatePadLegend();
   }
 
   showPadToast(msg) {
@@ -277,6 +293,7 @@ class GameApp {
 
     this.menuIndex = 0;
     this.refreshMenuItems();
+    this.updatePadLegend();
   }
 
   hideAllScreens() {
@@ -335,6 +352,7 @@ class GameApp {
         this.showGameOver(true);
         break;
     }
+    this.updatePadLegend();
   }
 
   showGameOver(victory) {

@@ -1,7 +1,7 @@
 {
   "frames": [
     {
-      "filename": "idle_0",
+      "filename": "player_0.png",
       "frame": {
         "x": 0,
         "y": 0,
@@ -23,7 +23,7 @@
       "duration": 100
     },
     {
-      "filename": "idle_1",
+      "filename": "player_1.png",
       "frame": {
         "x": 64,
         "y": 0,
@@ -45,7 +45,7 @@
       "duration": 100
     },
     {
-      "filename": "idle_2",
+      "filename": "player_2.png",
       "frame": {
         "x": 128,
         "y": 0,
@@ -67,7 +67,7 @@
       "duration": 100
     },
     {
-      "filename": "idle_3",
+      "filename": "player_3.png",
       "frame": {
         "x": 192,
         "y": 0,
@@ -89,7 +89,7 @@
       "duration": 100
     },
     {
-      "filename": "idle_4",
+      "filename": "player_4.png",
       "frame": {
         "x": 256,
         "y": 0,
@@ -111,7 +111,7 @@
       "duration": 100
     },
     {
-      "filename": "idle_5",
+      "filename": "player_5.png",
       "frame": {
         "x": 320,
         "y": 0,
@@ -133,7 +133,7 @@
       "duration": 100
     },
     {
-      "filename": "run_6",
+      "filename": "player_6.png",
       "frame": {
         "x": 384,
         "y": 0,
@@ -155,7 +155,7 @@
       "duration": 100
     },
     {
-      "filename": "run_7",
+      "filename": "player_7.png",
       "frame": {
         "x": 448,
         "y": 0,
@@ -177,7 +177,7 @@
       "duration": 100
     },
     {
-      "filename": "run_8",
+      "filename": "player_8.png",
       "frame": {
         "x": 512,
         "y": 0,
@@ -199,7 +199,7 @@
       "duration": 100
     },
     {
-      "filename": "run_9",
+      "filename": "player_9.png",
       "frame": {
         "x": 576,
         "y": 0,
@@ -221,7 +221,7 @@
       "duration": 100
     },
     {
-      "filename": "run_10",
+      "filename": "player_10.png",
       "frame": {
         "x": 640,
         "y": 0,
@@ -243,7 +243,7 @@
       "duration": 100
     },
     {
-      "filename": "run_11",
+      "filename": "player_11.png",
       "frame": {
         "x": 704,
         "y": 0,
@@ -265,7 +265,7 @@
       "duration": 100
     },
     {
-      "filename": "run_12",
+      "filename": "player_12.png",
       "frame": {
         "x": 768,
         "y": 0,
@@ -287,7 +287,7 @@
       "duration": 100
     },
     {
-      "filename": "run_13",
+      "filename": "player_13.png",
       "frame": {
         "x": 832,
         "y": 0,
@@ -309,7 +309,7 @@
       "duration": 100
     },
     {
-      "filename": "shoot_14",
+      "filename": "player_14.png",
       "frame": {
         "x": 896,
         "y": 0,
@@ -331,7 +331,7 @@
       "duration": 100
     },
     {
-      "filename": "shoot_15",
+      "filename": "player_15.png",
       "frame": {
         "x": 960,
         "y": 0,
@@ -353,7 +353,7 @@
       "duration": 100
     },
     {
-      "filename": "shoot_16",
+      "filename": "player_16.png",
       "frame": {
         "x": 1024,
         "y": 0,
@@ -375,7 +375,7 @@
       "duration": 100
     },
     {
-      "filename": "crouch_17",
+      "filename": "player_17.png",
       "frame": {
         "x": 1088,
         "y": 0,
@@ -397,7 +397,7 @@
       "duration": 100
     },
     {
-      "filename": "crouch_18",
+      "filename": "player_18.png",
       "frame": {
         "x": 1152,
         "y": 0,
@@ -419,7 +419,7 @@
       "duration": 100
     },
     {
-      "filename": "crouch_19",
+      "filename": "player_19.png",
       "frame": {
         "x": 1216,
         "y": 0,
@@ -441,7 +441,7 @@
       "duration": 100
     },
     {
-      "filename": "jump_20",
+      "filename": "player_20.png",
       "frame": {
         "x": 1280,
         "y": 0,
@@ -463,7 +463,7 @@
       "duration": 100
     },
     {
-      "filename": "jump_21",
+      "filename": "player_21.png",
       "frame": {
         "x": 1344,
         "y": 0,
@@ -485,7 +485,7 @@
       "duration": 100
     },
     {
-      "filename": "jump_22",
+      "filename": "player_22.png",
       "frame": {
         "x": 1408,
         "y": 0,
@@ -507,7 +507,7 @@
       "duration": 100
     },
     {
-      "filename": "hurt_23",
+      "filename": "player_23.png",
       "frame": {
         "x": 1472,
         "y": 0,
@@ -529,7 +529,7 @@
       "duration": 100
     },
     {
-      "filename": "hurt_24",
+      "filename": "player_24.png",
       "frame": {
         "x": 1536,
         "y": 0,
@@ -551,7 +551,7 @@
       "duration": 100
     },
     {
-      "filename": "death_25",
+      "filename": "player_25.png",
       "frame": {
         "x": 1600,
         "y": 0,
@@ -573,7 +573,7 @@
       "duration": 100
     },
     {
-      "filename": "death_26",
+      "filename": "player_26.png",
       "frame": {
         "x": 1664,
         "y": 0,
@@ -595,7 +595,7 @@
       "duration": 100
     },
     {
-      "filename": "death_27",
+      "filename": "player_27.png",
       "frame": {
         "x": 1728,
         "y": 0,
@@ -617,7 +617,7 @@
       "duration": 100
     },
     {
-      "filename": "death_28",
+      "filename": "player_28.png",
       "frame": {
         "x": 1792,
         "y": 0,
@@ -639,7 +639,7 @@
       "duration": 100
     },
     {
-      "filename": "death_29",
+      "filename": "player_29.png",
       "frame": {
         "x": 1856,
         "y": 0,
@@ -661,7 +661,7 @@
       "duration": 100
     },
     {
-      "filename": "death_30",
+      "filename": "player_30.png",
       "frame": {
         "x": 1920,
         "y": 0,
@@ -683,7 +683,7 @@
       "duration": 100
     },
     {
-      "filename": "death_31",
+      "filename": "player_31.png",
       "frame": {
         "x": 1984,
         "y": 0,
@@ -705,9 +705,141 @@
       "duration": 100
     },
     {
-      "filename": "death_32",
+      "filename": "player_32.png",
       "frame": {
         "x": 2048,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 64
+      },
+      "duration": 100
+    },
+    {
+      "filename": "player_33.png",
+      "frame": {
+        "x": 2112,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 64
+      },
+      "duration": 100
+    },
+    {
+      "filename": "player_34.png",
+      "frame": {
+        "x": 2176,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 64
+      },
+      "duration": 100
+    },
+    {
+      "filename": "player_35.png",
+      "frame": {
+        "x": 2240,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 64
+      },
+      "duration": 100
+    },
+    {
+      "filename": "player_36.png",
+      "frame": {
+        "x": 2304,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 64
+      },
+      "duration": 100
+    },
+    {
+      "filename": "player_37.png",
+      "frame": {
+        "x": 2368,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 64
+      },
+      "duration": 100
+    },
+    {
+      "filename": "player_38.png",
+      "frame": {
+        "x": 2432,
         "y": 0,
         "w": 64,
         "h": 64
@@ -728,12 +860,12 @@
     }
   ],
   "meta": {
-    "app": "neon-huntdown-build",
-    "version": "1.0",
+    "app": "neon-huntdown-build-v2",
+    "version": "2.0",
     "image": "",
     "format": "RGBA8888",
     "size": {
-      "w": 2112,
+      "w": 2496,
       "h": 64
     },
     "scale": "1",
@@ -778,6 +910,12 @@
         "name": "death",
         "from": 25,
         "to": 32,
+        "direction": "forward"
+      },
+      {
+        "name": "melee",
+        "from": 33,
+        "to": 38,
         "direction": "forward"
       }
     ],

@@ -94,21 +94,36 @@ class EnemyBase {
     this.facing = pcx >= this.getCenterX() ? 1 : -1;
   }
 
+  getGunHeight() {
+    if (this.sheetKey === 'boss') return 31;
+    return this.crouching ? 15 : 28;
+  }
+
+  // 与精灵中的枪管对齐；贴掩体时从掩体前沿伸出。
+  getMuzzle() {
+    const cx = this.getCenterX();
+    const y = this.y + this.getGunHeight();
+    let offset;
+    if (this.sheetKey === 'boss') offset = 56;
+    else offset = this.crouching ? 20 : (this.sheetKey === 'thug_mask' ? 24 : 22);
+
+    let x = cx + this.facing * offset;
+    if (this.cover && this.cover.hp > 0) {
+      x = this.facing > 0 ? this.cover.x + this.cover.w : this.cover.x;
+    }
+    return { x, y };
+  }
+
   tryShoot(t, player, force = false) {
     if (!force && t - this.lastShot < this.cfg.fireInterval) return null;
     this.lastShot = t;
     this.shootAnimUntil = t + 130;
 
-    // 枪口：贴掩体时从掩体前沿射出，避免被自己身后的掩体挡住
-    const gunY = this.y + Math.round(this.height * 0.36);
+    const muzzle = this.getMuzzle();
+    const gunY = muzzle.y;
     const facing = this.facing;
     const eb = GameConfig.ENEMY_BULLET;
-    let x;
-    if (this.cover && this.cover.hp > 0) {
-      x = facing > 0 ? this.cover.x + this.cover.w : this.cover.x - eb.width;
-    } else {
-      x = facing > 0 ? this.x + this.width : this.x - eb.width;
-    }
+    const x = facing > 0 ? muzzle.x : muzzle.x - eb.width;
 
     // 子弹以水平为主（vx 决定朝向），只做浅角度瞄准玩家躯干
     const speed = this.cfg.bulletSpeed || 6.5;
@@ -165,54 +180,66 @@ class EnemyBase {
   draw(ctx, t) {
     const sprites = getSprites();
     const sheet = sprites[this.sheetKey];
+    if (!sheet) return;
     const frame = this.pickFrame(t);
     const cx = this.getCenterX();
     const feet = this.y + this.height;
-    const flash = this.hitFlash > 0;
+    // 尸体不再闪白：死亡后 hitFlash 不再参与绘制，否则会留下永久白色剪影
+    const flash = !this.dead && this.hitFlash > 0;
 
-    // Boss 冲撞蓄力：红色脉冲光晕
+    // Boss 冲撞蓄力：平滑的红色光池 + 像素电弧
     if (this.chargeState === 'windup') {
-      const pulse = 0.4 + 0.3 * Math.sin(t / 60);
+      const pulse = 0.5 + 0.5 * Math.sin(t / 55);
+      const gx = cx;
+      const gy = feet - this.height * 0.55;
+      const radius = this.width * 2.0 + pulse * 10;
+      const g = ctx.createRadialGradient(gx, gy, 2, gx, gy, radius);
+      g.addColorStop(0, `rgba(255, 46, 74, ${0.22 + pulse * 0.12})`);
+      g.addColorStop(0.55, `rgba(255, 46, 74, ${0.08 + pulse * 0.04})`);
+      g.addColorStop(1, 'rgba(255, 46, 74, 0)');
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = pulse;
-      ctx.fillStyle = '#ff2e4a';
-      ctx.beginPath();
-      ctx.ellipse(cx, feet - this.height / 2, this.width * 1.2, this.height * 0.7, 0, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillStyle = g;
+      ctx.fillRect(gx - radius, gy - radius, radius * 2, radius * 2);
+      ctx.fillStyle = '#ff8a9a';
+      for (let i = 0; i < 5; i++) {
+        const a = t / 140 + i * 1.7;
+        const rr = this.width * (0.7 + (i % 3) * 0.3);
+        ctx.fillRect(
+          Math.round(gx + Math.cos(a) * rr),
+          Math.round(gy + Math.sin(a * 1.3) * this.height * 0.35),
+          1, 2,
+        );
+      }
       ctx.restore();
     }
-    // Boss 冲撞中：拖尾残影
+
+    // Boss 冲撞残影：用精灵白色剪影做两层拖尾
     if (this.chargeState === 'charging') {
-      ctx.save();
-      ctx.globalAlpha = 0.3;
-      ctx.fillStyle = '#ff2e4a';
-      ctx.fillRect(this.x - this.vx * 3, this.y, this.width, this.height);
-      ctx.restore();
+      for (let i = 1; i <= 2; i++) {
+        ctx.save();
+        ctx.globalAlpha = 0.10 / i;
+        ctx.globalCompositeOperation = 'lighter';
+        sheet.draw(ctx, frame, cx - this.vx * i * 1.4, feet, this.facing, true);
+        ctx.restore();
+      }
     }
 
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath();
-    ctx.ellipse(cx, feet - 2, this.width * 0.5, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
+    // 像素落地阴影
+    const sw = Math.max(10, Math.round(this.width * 0.8));
+    ctx.fillStyle = 'rgba(0,0,0,0.40)';
+    ctx.fillRect(Math.round(cx) - Math.round(sw / 2), Math.round(feet) - 2, sw, 2);
+    ctx.fillRect(Math.round(cx) - Math.round(sw / 3), Math.round(feet) - 4, Math.round(sw * 0.66), 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(Math.round(cx) - 3, Math.round(feet) - 5, 6, 1);
 
-    sheet.draw(ctx, frame, cx, feet, this.facing, flash);
-
-    // 血条（死亡时不显示）
-    if (this.dead) {
-      ctx.restore();
-      return;
+    // 暖色边缘光（霓虹街灯/店面漏光），尸体不再加光
+    if (!this.dead) {
+      sheet.drawTint(ctx, frame, cx - 1, feet, this.facing, '#ff8a3d', 0.23);
+      sheet.drawTint(ctx, frame, cx + 1, feet, this.facing, '#ff2e4a', 0.13);
     }
-    const bw = this.standHeight > 60 ? 70 : this.width + 8;
-    const bx = cx - bw / 2;
-    const by = this.y - 10;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(bx, by, bw, 5);
-    const ratio = Math.max(0, this.hp / this.maxHp);
-    ctx.fillStyle = ratio < 0.35 ? '#ff4757' : (ratio < 0.7 ? '#ffa502' : '#39ff88');
-    ctx.fillRect(bx, by, bw * ratio, 5);
-
+    sheet.draw(ctx, frame, cx, feet, this.facing, flash);
     ctx.restore();
   }
 }

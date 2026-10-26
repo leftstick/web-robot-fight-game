@@ -401,33 +401,52 @@ function drawSparks(ctx, frame) {
 // 血雾喷溅 6 帧
 function drawBlood(ctx, frame) {
   const cx = 48, cy = 48;
-  ctx.save();
   const t = frame / 5;
-  // 主血团
-  const r = 6 + t * 22;
-  ctx.fillStyle = `rgba(204,26,58,${0.8 - t * 0.5})`;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-  // 飞溅血滴
-  const drops = 10 - frame;
+  const alpha = Math.max(0, 1 - t * 0.85);
+  const spread = 1 + t * 1.6;
+  // 块状血团：1px 网格矩形拼出，避免平滑圆形破坏像素风
+  const clusters = [
+    { x: 0, y: 0, w: 14, h: 12 },
+    { x: -10, y: -5, w: 8, h: 7 },
+    { x: 8, y: 4, w: 9, h: 8 },
+    { x: -4, y: 9, w: 7, h: 5 },
+    { x: 7, y: -9, w: 6, h: 5 },
+    { x: -12, y: 4, w: 5, h: 4 },
+  ];
+  const grow = t * 10;
+  for (let i = 0; i < clusters.length; i++) {
+    const b = clusters[i];
+    const w = Math.max(2, Math.round(b.w + grow * (i === 0 ? 1.2 : 0.6)));
+    const h = Math.max(2, Math.round(b.h + grow * (i === 0 ? 1.1 : 0.55)));
+    const bx = Math.round(cx + b.x * spread - w / 2);
+    const by = Math.round(cy + b.y * spread - h / 2);
+    ctx.fillStyle = i % 2 ? `rgba(122,12,32,${alpha})` : `rgba(178,20,48,${alpha})`;
+    ctx.fillRect(bx, by, w, h);
+    ctx.fillStyle = `rgba(255,84,96,${alpha * 0.55})`;
+    ctx.fillRect(bx + 1, by, Math.max(1, w - 2), 1);
+    ctx.fillStyle = `rgba(90,8,24,${alpha * 0.8})`;
+    ctx.fillRect(bx - 1, by + (h >> 1), 1, Math.max(1, h >> 1));
+    ctx.fillRect(bx + w, by + 1, 1, Math.max(1, h >> 1));
+  }
+  // 飞溅像素：黄金角分布，向外甩出并下坠
+  const drops = Math.max(3, 14 - frame * 2);
   for (let i = 0; i < drops; i++) {
-    const ang = (i / 10) * Math.PI * 2;
-    const dist = 8 + t * 30;
-    const x = cx + Math.cos(ang) * dist;
-    const y = cy + Math.sin(ang) * dist;
-    const s = Math.max(1, 3 - Math.floor(frame / 2));
-    ctx.fillStyle = i % 3 === 0 ? '#ff5a5a' : '#cc1a3a';
-    ctx.fillRect(x - s / 2, y - s / 2, s, s);
+    const ang = i * 2.399963 + 0.7;
+    const dist = (5 + t * 30) * (0.65 + ((i * 37) % 10) / 14);
+    const dx = Math.cos(ang) * dist;
+    const dy = Math.sin(ang) * dist * 0.75 + t * t * 10;
+    const s = i % 4 === 0 ? 2 : 1;
+    ctx.fillStyle = i % 3 === 0 ? `rgba(255,90,104,${alpha})` : `rgba(176,16,40,${alpha})`;
+    ctx.fillRect(Math.round(cx + dx), Math.round(cy + dy), s, s);
   }
-  // 核心
-  if (frame < 4) {
-    ctx.fillStyle = `rgba(255,90,90,${0.9 - t * 0.3})`;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 4 - frame * 0.5, 0, Math.PI * 2);
-    ctx.fill();
+  // 亮核（前 3 帧）
+  if (frame < 3) {
+    const r = 3 - frame;
+    ctx.fillStyle = `rgba(255,138,148,${0.9 - t})`;
+    ctx.fillRect(cx - r, cy - r + 1, r * 2, r * 2);
+    ctx.fillStyle = `rgba(255,220,224,${0.75 - t * 0.5})`;
+    ctx.fillRect(cx - 1, cy, 2, 2);
   }
-  ctx.restore();
 }
 
 // 手雷爆炸 12 帧
