@@ -5,7 +5,7 @@ export const PICKUP_DEFS = {
   health: { label: '医疗包', color: '#ff5a6e', w: 13, h: 10 },
   ammo: { label: '弹药箱', color: '#ffe066', w: 14, h: 9 },
   rifle: { label: '突击步枪', color: '#5fe6ff', w: 16, h: 9, weapon: 'rifle' },
-  plasma: { label: '线光线弹枪', color: '#39ff88', w: 15, h: 10, weapon: 'plasma' },
+  plasma: { label: '等离子枪', color: '#39ff88', w: 15, h: 10, weapon: 'plasma' },
 };
 
 const WEAPON_BY_ID = new Map(GameConfig.WEAPONS.map((w) => [w.id, w]));

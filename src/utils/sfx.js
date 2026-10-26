@@ -81,7 +81,19 @@ export class Sfx {
     this._tone({ freq: 320, slideTo: 640, type: 'square', dur: 0.14, vol: 0.2 });
   }
 
-  shoot() {
+  shoot(kind = 'pistol') {
+    if (kind === 'rifle') {
+      // 更短更脆的连发 crack
+      this._tone({ freq: 1250, slideTo: 460, type: 'square', dur: 0.045, vol: 0.1 });
+      this._noise({ dur: 0.04, vol: 0.06, cutoff: 3600 });
+      return;
+    }
+    if (kind === 'plasma') {
+      // 低沉的电浆放电：锯齿下坠 + 高频谐波
+      this._tone({ freq: 220, slideTo: 55, type: 'sawtooth', dur: 0.24, vol: 0.2 });
+      this._tone({ freq: 880, slideTo: 120, type: 'triangle', dur: 0.15, vol: 0.1 });
+      return;
+    }
     this._tone({ freq: 900, slideTo: 300, type: 'square', dur: 0.07, vol: 0.16 });
   }
 

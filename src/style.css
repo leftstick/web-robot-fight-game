@@ -641,6 +641,13 @@ body::before {
   line-height: 1;
 }
 
+/* 武器特性跟随当前武器强调色，和 AMMO 标签区分 */
+#weaponKicker {
+  color: var(--weapon-color);
+  opacity: 0.75;
+  letter-spacing: 0.5px;
+}
+
 .weapon-name {
   font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC', sans-serif;
   font-size: clamp(12px, 2cqh, 18px);
@@ -744,6 +751,44 @@ body::before {
   color: #cfe1f1;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+}
+
+/* 窄容器：先收起武器特性文案，再压缩间距，避免文字被挤成竖排 */
+@container (max-width: 760px) {
+  .weapon-hud {
+    gap: 3px;
+    padding: 0 5px;
+  }
+
+  .weapon-kicker {
+    display: none;
+  }
+
+  .weapon-main-icon {
+    height: 20px;
+  }
+
+  .weapon-name {
+    font-size: 11px;
+    letter-spacing: 0;
+  }
+
+  .weapon-ammo-value {
+    font-size: 16px;
+  }
+
+  .weapon-slot {
+    width: 24px;
+    height: 30px;
+  }
+
+  .weapon-slot-icon {
+    margin-bottom: 3px;
+  }
+
+  .weapon-slot-ammo {
+    font-size: 9px;
+  }
 }
 
 /* 手柄按键图例（仅手柄连接时显示，位于画布底部中央） */

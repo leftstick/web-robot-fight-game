@@ -99,20 +99,42 @@ export const GameConfig = {
   },
 
   // 武器槽接口：手枪为无限弹药的保底武器，拾取武器有独立弹量。
+  // 三把枪刻意做成三种节奏：
+  //   手枪  —— 精准、无限，单发 1 伤，稳定三枪放倒暴徒；
+  //   步枪  —— 全自动高射速 + 小幅散布，压制成群目标但吃弹药；
+  //   等离子 —— 慢速重弹，单发 3 伤并溅射，一发清暴徒，打 Boss 也最省弹。
   WEAPONS: [
     {
       id: 'pistol', name: '手枪', color: '#ffe066',
-      fireInterval: 110, bulletSpeed: 6.5, bulletDamage: 1,
+      trait: '精准 · 无限',
+      fireInterval: 130, bulletSpeed: 7.4, bulletDamage: 1,
+      bulletWidth: 12, bulletHeight: 3,
+      spreadDeg: 0,
+      bulletStyle: 'pistol', sfx: 'pistol', muzzleScale: 0.5,
+      impactShake: 4, impactShakeIntensity: 3, hitStop: 18,
       infiniteAmmo: true,
     },
     {
       id: 'rifle', name: '突击步枪', color: '#5fe6ff',
-      fireInterval: 75, bulletSpeed: 7.5, bulletDamage: 1,
+      trait: '全自动 · 高射速',
+      fireInterval: 65, bulletSpeed: 8.2, bulletDamage: 1,
+      bulletWidth: 10, bulletHeight: 2,
+      spreadDeg: 3.2,
+      bulletStyle: 'rifle', sfx: 'rifle', muzzleScale: 0.42, muzzleTint: '#5fe6ff',
+      fireShake: 1.5,
+      impactShake: 3, impactShakeIntensity: 2, hitStop: 12,
       pickupAmmo: 60, maxAmmo: 180,
     },
     {
-      id: 'plasma', name: '线光线弹枪', color: '#39ff88',
-      fireInterval: 160, bulletSpeed: 5.5, bulletDamage: 2,
+      id: 'plasma', name: '等离子枪', color: '#39ff88',
+      trait: '重击 · 溅射',
+      fireInterval: 340, bulletSpeed: 4.8, bulletDamage: 3,
+      bulletWidth: 14, bulletHeight: 14,
+      spreadDeg: 0,
+      splashRadius: 26, splashDamage: 2,
+      bulletStyle: 'plasma', sfx: 'plasma', muzzleScale: 0.8, muzzleTint: '#39ff88',
+      fireShake: 5,
+      impactShake: 9, impactShakeIntensity: 6, hitStop: 42,
       pickupAmmo: 24, maxAmmo: 60,
     },
   ],

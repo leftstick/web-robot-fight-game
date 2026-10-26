@@ -259,13 +259,27 @@ export class Player {
   createBullet(weapon) {
     const w = weapon || this.getWeapon();
     const muzzle = this.getMuzzle();
-    const x = this.facing > 0 ? muzzle.x : muzzle.x - P.bulletWidth;
-    return new Bullet(x, muzzle.y - P.bulletHeight / 2, (w.bulletSpeed || P.bulletSpeed) * this.facing, 0, {
-      width: P.bulletWidth,
-      height: P.bulletHeight,
-      damage: w.bulletDamage || P.bulletDamage,
+    const width = w.bulletWidth || P.bulletWidth;
+    const height = w.bulletHeight || P.bulletHeight;
+    const speed = w.bulletSpeed || P.bulletSpeed;
+
+    // 散布按角度配置，向上/向下随机偏转；0 散布保持完全水平
+    const spreadRad = ((w.spreadDeg || 0) * Math.PI) / 180;
+    const angle = spreadRad ? (Math.random() * 2 - 1) * spreadRad : 0;
+
+    const x = this.facing > 0 ? muzzle.x : muzzle.x - width;
+    return new Bullet(x, muzzle.y - height / 2, Math.cos(angle) * speed * this.facing, Math.sin(angle) * speed, {
+      width,
+      height,
+      damage: w.bulletDamage ?? P.bulletDamage,
       color: w.color,
       owner: BulletOwner.PLAYER,
+      style: w.bulletStyle || 'pistol',
+      splashRadius: w.splashRadius || 0,
+      splashDamage: w.splashDamage || 0,
+      impactShake: w.impactShake,
+      impactShakeIntensity: w.impactShakeIntensity,
+      hitStop: w.hitStop,
     });
   }
 

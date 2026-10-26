@@ -270,14 +270,21 @@ export class Game {
     if (input.shoot && !p.meleeMode) {
       const fire = p.tryFire(this.currentTime);
       if (fire) {
-        const b = p.createBullet(fire.weapon);
+        const w = fire.weapon;
+        const b = p.createBullet(w);
         this.bullets.push(b);
         // 枪口特效对准精灵里的实际枪管位置
         const muzzle = p.getMuzzle();
-        this.effectSystem.muzzleFlash(muzzle.x, muzzle.y, p.facing);
-        this.effectSystem.shell(muzzle.x - p.facing * 4, muzzle.y, p.facing * 1.5, -1.5);
-        this.sfx.shoot();
-        if (fire.emptied) this.onWeaponEmpty(fire.weapon);
+        this.effectSystem.muzzleFlash(muzzle.x, muzzle.y, p.facing, w.muzzleScale || 0.5, w.muzzleTint || null);
+        if (w.bulletStyle === 'plasma') {
+          // 等离子不抛壳，改喷一圈绿色粒子
+          this.particleSystem.createExplosion(muzzle.x, muzzle.y, w.color, 5);
+        } else {
+          this.effectSystem.shell(muzzle.x - p.facing * 4, muzzle.y, p.facing * 1.5, -1.5);
+        }
+        if (w.fireShake) this.addScreenShake(w.fireShake, w.fireShake);
+        this.sfx.shoot(w.sfx || w.id);
+        if (fire.emptied) this.onWeaponEmpty(w);
       }
     }
 
@@ -390,8 +397,10 @@ export class Game {
       if (b.ignoreCover === c) continue;
       if (aabb(bb, c.getBounds())) {
         b.active = false;
-        this.effectSystem.hitSparks(b.x + b.width / 2, b.y + b.height / 2);
-        this.addHitStop(18);
+        const hx = b.x + b.width / 2;
+        const hy = b.y + b.height / 2;
+        this.bulletImpactFx(b, hx, hy);
+        this.addHitStop(b.hitStop);
         if (c.takeDamage(b.damage)) {
           const cc = c.getCenter();
           this.effectSystem.explosion(cc.x, cc.y);
@@ -411,12 +420,15 @@ export class Game {
         if (e.dead) continue;
         if (aabb(bb, e.getBounds())) {
           b.active = false;
-          this.effectSystem.blood(b.x + b.width / 2, b.y + b.height / 2);
-          this.effectSystem.hitSparks(b.x + b.width / 2, b.y + b.height / 2);
+          const hx = b.x + b.width / 2;
+          const hy = b.y + b.height / 2;
+          this.bulletImpactFx(b, hx, hy);
+          this.effectSystem.blood(hx, hy);
           const died = e.takeDamage(b.damage);
-          this.addScreenShake(4, 3);
-          this.addHitStop(died ? 85 : 22);
+          this.addScreenShake(b.impactShake, b.impactShakeIntensity);
+          this.addHitStop(died ? 85 : b.hitStop);
           if (died) this.killEnemy(e);
+          if (b.splashRadius > 0) this.applySplash(b, hx, hy, e);
           return;
         }
       }
@@ -426,6 +438,29 @@ export class Game {
         b.active = false;
         this.damagePlayer();
       }
+    }
+  }
+
+  // 命中特效按弹种区分：等离子带绿色爆炸，实弹只有火花
+  bulletImpactFx(b, x, y) {
+    this.effectSystem.hitSparks(x, y);
+    this.particleSystem.createHitEffect(x, y, b.color);
+    if (b.splashRadius > 0) {
+      this.effectSystem.explosion(x, y);
+      this.particleSystem.createExplosion(x, y, b.color, 12);
+    }
+  }
+
+  // 等离子溅射：只伤及直接命中目标之外的敌人，避免同一发吃两次伤害
+  applySplash(b, cx, cy, primary) {
+    for (const e of this.enemies) {
+      if (e.dead || e === primary) continue;
+      const ex = e.x + e.width / 2;
+      const ey = e.y + e.height / 2;
+      if (Math.hypot(ex - cx, ey - cy) > b.splashRadius + e.width * 0.5) continue;
+      const died = e.takeDamage(b.splashDamage);
+      this.particleSystem.createHitEffect(ex, ey, b.color);
+      if (died) this.killEnemy(e);
     }
   }
 

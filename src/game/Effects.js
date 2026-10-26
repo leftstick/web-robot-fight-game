@@ -18,6 +18,7 @@ export class Effect {
     this.friction = opts.friction || 1;
     this.additive = opts.additive !== false;
     this.facing = opts.facing || 1;
+    this.tint = opts.tint || null;
   }
 
   update(deltaTime) {
@@ -43,7 +44,17 @@ export class Effect {
     const sheet = getFx(this.type);
     if (!sheet) return;
     if (this.additive) {
-      sheet.drawAdditive(ctx, this.frame, this.x, this.y, this.scale);
+      if (this.tint) {
+        // 彩色枪口焰：先叠一层武器色，再补一点原始白热核心
+        ctx.save();
+        ctx.globalAlpha = 0.95;
+        sheet.drawAdditiveTint(ctx, this.frame, this.x, this.y, this.scale, this.tint);
+        ctx.globalAlpha = 0.22;
+        sheet.drawAdditive(ctx, this.frame, this.x, this.y, this.scale);
+        ctx.restore();
+      } else {
+        sheet.drawAdditive(ctx, this.frame, this.x, this.y, this.scale);
+      }
     } else {
       const w = sheet.frameW * this.scale;
       const h = sheet.frameH * this.scale;
@@ -65,12 +76,13 @@ export class EffectSystem {
     this.effects.push(new Effect(type, x, y, opts));
   }
 
-  // 枪口火焰
-  muzzleFlash(x, y, facing = 1) {
+  // 枪口火焰（scale / tint 按武器区分）
+  muzzleFlash(x, y, facing = 1, scale = 0.5, tint = null) {
     this.spawn('muzzle_flash', x, y, {
-      scale: 0.5,
+      scale,
       frameDuration: 50,
       facing,
+      tint,
     });
   }
 

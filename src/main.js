@@ -68,6 +68,7 @@ class GameApp {
     ];
     this.weaponHud = document.getElementById('weaponHud');
     this.weaponMainIcon = document.getElementById('weaponMainIcon');
+    this.weaponKicker = document.getElementById('weaponKicker');
     this.weaponName = document.getElementById('weaponName');
     this.weaponAmmo = document.getElementById('weaponAmmo');
     this.weaponSlots = document.getElementById('weaponSlots');
@@ -77,6 +78,7 @@ class GameApp {
     this._weaponAmmoText = '';
     this._weaponLow = false;
     this._weaponColor = '';
+    this._weaponTrait = '';
     this._activeSlotId = null;
 
     // 菜单导航：当前屏幕的可选项、选中下标（键盘/手柄共用同一套）
@@ -181,6 +183,12 @@ class GameApp {
 
     if (this.weaponName.textContent !== w.name) {
       this.weaponName.textContent = w.name;
+    }
+
+    const trait = w.trait || 'WEAPON';
+    if (this.weaponKicker && trait !== this._weaponTrait) {
+      this.weaponKicker.textContent = trait;
+      this._weaponTrait = trait;
     }
 
     const ammo = p.ammo[w.id];

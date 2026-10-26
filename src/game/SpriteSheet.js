@@ -167,6 +167,20 @@ export class FxSheet extends SpriteSheet {
     ctx.drawImage(this.image, frame * this.frameW, 0, this.frameW, this.frameH, x, y, w, h);
     ctx.restore();
   }
+
+  // 染色版叠加绘制：让枪口火焰跟随武器颜色（等离子绿 / 步枪青）
+  drawAdditiveTint(ctx, frame, cx, cy, scale, color) {
+    const src = this._ensureTint(color);
+    const w = this.frameW * scale;
+    const h = this.frameH * scale;
+    const x = cx - w / 2;
+    const y = cy - h / 2;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(src, frame * this.frameW, 0, this.frameW, this.frameH, x, y, w, h);
+    ctx.restore();
+  }
 }
 
 // ============================================================
