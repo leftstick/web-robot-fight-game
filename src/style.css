@@ -461,18 +461,20 @@ body::before {
   position: absolute;
   bottom: 20px;
   color: var(--text-muted);
+  font-family: 'Consolas', 'SFMono-Regular', 'Courier New', monospace;
   font-size: 12px;
   letter-spacing: 1px;
 }
 
 .controls-hint {
   position: static;
-  color: var(--text-muted);
-  font-size: 11px;
+  color: #9fb3c8;
+  font-family: 'Consolas', 'SFMono-Regular', 'Courier New', monospace;
+  font-size: 12px;
   letter-spacing: 1px;
   text-align: center;
   max-width: 90%;
-  line-height: 1.8;
+  line-height: 1.9;
   margin-top: 24px;
   padding: 0 16px;
 }
@@ -487,10 +489,9 @@ body::before {
   opacity: 0.9;
 }
 
-.controls-pad-hint {
-  margin-top: 6px;
+#controlsHint.pad {
   color: #39ff88;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 /* 手柄按键图例（仅手柄连接时显示，位于画布底部中央） */

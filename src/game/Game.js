@@ -1086,7 +1086,50 @@ export class Game {
     }
 
     this.drawWeaponHud(ctx);
+    this.drawControlHints(ctx);
     this.drawPickupToast(ctx);
+  }
+
+  // 左下角：非触屏设备显示按键提示；接入手柄后自动换成手柄按键
+  drawControlHints(ctx) {
+    if (this.state !== GameState.PLAYING) return;
+    const pad = this.input.isPadConnected();
+    if (!pad && this.input.isTouchEnabled()) return;
+
+    const lines = pad
+      ? ['摇杆 移动 · A 跳 · B 蹲',
+         'X/RT 射击 · Y/RB 切枪',
+         'LB 手雷 · R3 劈砍 · Start 暂停']
+      : ['A/D 移动 · W 跳 · S 蹲',
+         '空格 射击 · Q 切枪 · X 劈砍',
+         'G 手雷 · Esc 暂停'];
+
+    ctx.save();
+    ctx.font = '6px monospace';
+    ctx.textAlign = 'left';
+    let maxW = 0;
+    for (const line of lines) maxW = Math.max(maxW, ctx.measureText(line).width);
+
+    const lineH = 8;
+    const panelW = Math.ceil(maxW) + 11;
+    const panelH = lines.length * lineH + 5;
+    const px = 5;
+    const py = this.logicalH - panelH - 4;
+
+    ctx.fillStyle = 'rgba(3,7,12,0.78)';
+    ctx.fillRect(px, py, panelW, panelH);
+    ctx.fillStyle = pad ? '#39ff88' : '#5fe6ff';
+    ctx.globalAlpha = 0.9;
+    ctx.fillRect(px, py, 1, panelH);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillRect(px + 1, py, panelW - 1, 1);
+
+    ctx.fillStyle = pad ? '#b6ffcf' : '#b5e1ff';
+    lines.forEach((line, i) => {
+      ctx.fillText(line, px + 5, py + 9 + i * lineH);
+    });
+    ctx.restore();
   }
 
   // 底部中央：当前武器 + 余弹 + 背包槽（只在有弹药的武器之间切换）

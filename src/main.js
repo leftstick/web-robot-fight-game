@@ -1,6 +1,15 @@
 import { Game, GameState } from './game/Game.js';
 import { LEVEL_META, GameConfig } from './config/gameConfig.js';
 
+// 按键提示文案：按当前设备切换，手柄连接时优先显示手柄按键
+const INPUT_HINTS = {
+  keyboard: '键盘：← → / A D 移动 · ↑ / W / K 跳 · ↓ / S 蹲 · 空格 / J 射击 · Q / L 切枪 · G 手雷 · X 劈砍',
+  pad: '手柄：左摇杆 / 十字键 移动 · A 跳 · X / RT 射击 · B 蹲 · Y / RB 切枪 · LT 瞄准 · LB 手雷 · R3 劈砍 · Start 暂停',
+  touch: '触屏：左摇杆 移动，下推蹲 · 右侧按钮 射击 / 跳 / 蹲 / 切枪',
+  keyboardMenu: '菜单：方向键 选择 · 空格 / 回车 确认 · Backspace 返回',
+  padMenu: '菜单：D-pad / 左摇杆 选择 · A 确认 · B 返回',
+};
+
 class GameApp {
   constructor() {
     this.canvas = document.getElementById('gameCanvas');
@@ -31,6 +40,13 @@ class GameApp {
     this.toastTimer = null;
     this.padConnected = false;
     this.padPromptAllowed = false;
+
+    // 开始 / 暂停 / 结算界面的按键提示，按设备动态切换
+    this.controlsHint = document.getElementById('controlsHint');
+    this.controlsMenuHint = document.getElementById('controlsMenuHint');
+    this.pauseMenuHint = document.getElementById('pauseMenuHint');
+    this.gameOverMenuHint = document.getElementById('gameOverMenuHint');
+    this.menuHints = document.querySelectorAll('.menu-hint');
 
     // 菜单导航：当前屏幕的可选项、选中下标（键盘/手柄共用同一套）
     this.menuScreen = null;
@@ -70,22 +86,33 @@ class GameApp {
   }
 
   setupDeviceSpecific() {
-    const isTouchDevice = (('ontouchstart' in window) ||
-                           (navigator.maxTouchPoints > 0));
+    this.updateInputHints();
+  }
 
-    const hint = document.getElementById('controlsHint');
-    const menuHint = document.querySelector('.menu-hint');
+  // 按键提示随「触屏 / 键盘 / 手柄」切换；接上手柄后优先显示手柄按键
+  updateInputHints() {
+    const touch = this.game.input.isTouchEnabled();
+    const pad = this.padConnected;
+    const menuText = pad ? INPUT_HINTS.padMenu : INPUT_HINTS.keyboardMenu;
 
-    if (isTouchDevice) {
-      // 移动端：更新操作提示（与虚拟摇杆布局一致）
-      if (hint) {
-        hint.textContent = '左摇杆：左右移动，上推跳 / 下推蹲 ｜ 右侧按钮：射击 / 跳 / 蹲 / 切枪';
-      }
-      // 失败界面不显示键盘提示
-      if (menuHint) {
-        menuHint.style.display = 'none';
-      }
+    if (this.controlsHint) {
+      this.controlsHint.textContent = pad ? INPUT_HINTS.pad
+        : (touch ? INPUT_HINTS.touch : INPUT_HINTS.keyboard);
+      this.controlsHint.classList.toggle('pad', pad);
     }
+
+    if (this.controlsMenuHint) {
+      this.controlsMenuHint.textContent = menuText;
+      this.controlsMenuHint.style.display = (touch && !pad) ? 'none' : '';
+    }
+
+    if (this.pauseMenuHint) this.pauseMenuHint.textContent = menuText;
+    if (this.gameOverMenuHint) this.gameOverMenuHint.textContent = menuText;
+
+    // 触屏且未接手柄时，菜单靠直接点按，不显示键位提示
+    this.menuHints.forEach((el) => {
+      el.style.display = (touch && !pad) ? 'none' : '';
+    });
   }
 
   setupGameCallbacks() {
@@ -114,13 +141,17 @@ class GameApp {
   // 游戏中隐藏按键图例，避免挡住战斗画面；菜单/选关时再显示
   updatePadLegend() {
     const inGame = this.game.state === GameState.PLAYING || this.game.state === GameState.PAUSED;
+    const screen = this.activeScreenName();
     if (this.gpLegend) {
-      this.gpLegend.style.display = this.padConnected && !inGame ? 'flex' : 'none';
+      // 开始界面的按键说明会随设备切换，底部图例不再重复显示
+      this.gpLegend.style.display = this.padConnected && !inGame && screen !== 'start' ? 'flex' : 'none';
     }
-    // 进入战斗后不再提示“按键激活手柄”，避免压住画面
+    // 进入战斗后不再提示“按键激活手柄”，避免压住画面；纯触屏设备也不显示
+    const touchOnly = this.game.input.isTouchEnabled() && !this.padConnected;
     if (this.gpPending) {
-      this.gpPending.style.display = this.padPromptAllowed && !this.padConnected && !inGame ? 'flex' : 'none';
+      this.gpPending.style.display = this.padPromptAllowed && !this.padConnected && !inGame && !touchOnly ? 'flex' : 'none';
     }
+    this.updateInputHints();
   }
 
   // 手柄 API 仅在安全上下文（HTTPS / localhost）可用；非安全上下文下提示用户
