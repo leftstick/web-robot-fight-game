@@ -5,6 +5,7 @@ import { ParticleSystem } from './Particle.js';
 import { EffectSystem } from './Effects.js';
 import { SceneRenderer } from './SceneRenderer.js';
 import { Level, loadLevels } from './Level.js';
+import { Pickup } from './Pickup.js';
 import { BulletOwner } from './Bullet.js';
 import { InputManager } from '../utils/input.js';
 import { Sfx } from '../utils/sfx.js';
@@ -58,6 +59,9 @@ export class Game {
     this.enemies = [];
     this.bullets = [];
     this.grenades = [];
+    this.pickups = [];
+    this.killsSinceDrop = 0;
+    this.pickupToast = null;
     this.boss = null;
     this.bossSpawned = false;
 
@@ -147,6 +151,9 @@ export class Game {
     this.totalKills = 0;
     this.bullets = [];
     this.grenades = [];
+    this.pickups = [];
+    this.killsSinceDrop = 0;
+    this.pickupToast = null;
     this.enemies = [];
     this.boss = null;
     this.bossSpawned = false;
@@ -255,18 +262,23 @@ export class Game {
     p.moveLeft = input.moveLeft;
     p.moveRight = input.moveRight;
     p.aiming = input.aim;
-    p.setCrouch(input.crouch && p.onGround);
+    // 只记录意图；是否真的站起由头顶净空决定
+    p.wantsCrouch = input.crouch;
 
     if (input.jump && p.jump()) this.sfx.jump();
 
-    if (input.shoot && !p.meleeMode && p.tryFire(this.currentTime)) {
-      const b = p.createBullet();
-      this.bullets.push(b);
-      // 枪口特效对准精灵里的实际枪管位置
-      const muzzle = p.getMuzzle();
-      this.effectSystem.muzzleFlash(muzzle.x, muzzle.y, p.facing);
-      this.effectSystem.shell(muzzle.x - p.facing * 4, muzzle.y, p.facing * 1.5, -1.5);
-      this.sfx.shoot();
+    if (input.shoot && !p.meleeMode) {
+      const fire = p.tryFire(this.currentTime);
+      if (fire) {
+        const b = p.createBullet(fire.weapon);
+        this.bullets.push(b);
+        // 枪口特效对准精灵里的实际枪管位置
+        const muzzle = p.getMuzzle();
+        this.effectSystem.muzzleFlash(muzzle.x, muzzle.y, p.facing);
+        this.effectSystem.shell(muzzle.x - p.facing * 4, muzzle.y, p.facing * 1.5, -1.5);
+        this.sfx.shoot();
+        if (fire.emptied) this.onWeaponEmpty(fire.weapon);
+      }
     }
 
     if (input.grenade && p.tryGrenade(this.currentTime)) {
@@ -289,6 +301,7 @@ export class Game {
     this.updateCamera();
     this.updateBullets(dtf);
     this.updateEnemies(dtf);
+    this.updatePickups(dtf);
     this.updateGrenades(dtf);
     this.spawnBoss();
 
@@ -342,9 +355,9 @@ export class Game {
 
   switchWeapon() {
     if (!this.player) return;
-    const total = GameConfig.WEAPONS.length;
-    this.player.weaponIndex = (this.player.weaponIndex + 1) % total;
-    this.sfx.click();
+    // 只在仍有弹药的武器之间循环；只有一把可用时不响不切
+    const next = this.player.cycleWeapon();
+    if (next) this.sfx.click();
   }
 
   updateCamera() {
@@ -520,15 +533,140 @@ export class Game {
     this.addHitStop(85);
     this.sfx.explosion();
 
-    this.score += e.score;
+    this.addScore(e.score);
     this.totalKills++;
-    if (this.onScoreChange) this.onScoreChange(this.score);
     this.emitRemaining(false);
+    this.spawnLoot(e);
 
     if (e === this.boss) {
       this.state = GameState.VICTORY;
       if (this.onStateChange) this.onStateChange(this.state);
     }
+  }
+
+  addScore(points) {
+    this.score += points;
+    if (this.onScoreChange) this.onScoreChange(this.score);
+  }
+
+  // —— 掉落 ——
+  spawnLoot(enemy) {
+    if (!enemy || enemy === this.boss) return;
+
+    this.killsSinceDrop++;
+    if (this.pickups.length >= GameConfig.LOOT.maxPickups) return;
+
+    const forced = this.killsSinceDrop >= GameConfig.LOOT.pityKills;
+    if (!forced && Math.random() >= GameConfig.LOOT.dropChance) return;
+
+    const type = this.rollLootType();
+    this.killsSinceDrop = 0;
+    this.spawnPickup(type, enemy.getCenterX(), enemy.y + enemy.height);
+  }
+
+  rollLootType() {
+    const drops = GameConfig.LOOT.drops;
+    const total = drops.reduce((sum, d) => sum + d.weight, 0);
+    let roll = Math.random() * total;
+    for (const drop of drops) {
+      roll -= drop.weight;
+      if (roll <= 0) return drop.type;
+    }
+    return 'health';
+  }
+
+  spawnPickup(type, centerX, bottomY) {
+    if (this.pickups.length >= GameConfig.LOOT.maxPickups) return null;
+    const pickup = new Pickup(type, centerX, bottomY, this.currentTime);
+    this.pickups.push(pickup);
+    return pickup;
+  }
+
+  updatePickups(dtf) {
+    const p = this.player;
+    const pcx = p.getCenterX();
+    const pcy = p.y + p.height * 0.5;
+
+    for (let i = this.pickups.length - 1; i >= 0; i--) {
+      const pickup = this.pickups[i];
+      pickup.update(dtf, this.world);
+
+      if (!pickup.isCollectable(this.currentTime)) continue;
+
+      // 已落地的掉落物在近身时轻微吸附，避免高速跑动时擦边漏捡
+      const pkx = pickup.x + pickup.w / 2;
+      const pky = pickup.y + pickup.h / 2;
+      const dx = pcx - pkx;
+      const dy = pcy - pky;
+      if (pickup.settled && Math.abs(dx) < 44 && Math.abs(dy) < 36 && Math.abs(dx) > 0.5) {
+        pickup.x += Math.sign(dx) * 1.1 * dtf;
+      }
+
+      if (!aabb(p.getBounds(), pickup.getCollectBounds())) continue;
+
+      this.pickups.splice(i, 1);
+      pickup.collected = true;
+      this.collectPickup(pickup);
+    }
+  }
+
+  collectPickup(pickup) {
+    const p = this.player;
+    const cx = pickup.x + pickup.w / 2;
+    const cy = pickup.y + pickup.h / 2;
+    this.effectSystem.hitSparks(cx, cy);
+    this.particleSystem.createExplosion(cx, cy, pickup.color, 7);
+    this.sfx.pickup();
+
+    if (pickup.type === 'health') {
+      if (this.lives < GameConfig.PLAYER.lives) {
+        this.lives++;
+        if (this.onLivesChange) this.onLivesChange(this.lives);
+        this.showPickupToast('医疗包 +1 生命', '#ff5a6e');
+      } else {
+        this.addScore(GameConfig.LOOT.healthScore);
+        this.showPickupToast(`生命已满 +${GameConfig.LOOT.healthScore} 分`, '#ff5a6e');
+      }
+      return;
+    }
+
+    if (pickup.type === 'ammo') {
+      const restored = p.addAmmoToFinite();
+      if (restored > 0) {
+        this.showPickupToast(`弹药补给 +${restored} 发`, '#ffe066');
+      } else {
+        this.addScore(GameConfig.LOOT.ammoScore);
+        this.showPickupToast(`弹药箱 +${GameConfig.LOOT.ammoScore} 分`, '#ffe066');
+      }
+      return;
+    }
+
+    const weaponId = pickup.def.weapon || pickup.type;
+    const amount = GameConfig.LOOT.weaponAmmo[weaponId] || 30;
+    const result = p.addWeapon(weaponId, amount);
+    if (!result) return;
+
+    if (result.added > 0) {
+      const action = result.isNew ? '入包' : '补弹';
+      this.showPickupToast(`${result.weapon.name} ${action} +${result.added} 发`, result.weapon.color);
+    } else {
+      this.showPickupToast(`${result.weapon.name} 弹药已满`, result.weapon.color);
+    }
+  }
+
+  onWeaponEmpty(weapon) {
+    const next = this.player.removeWeapon(weapon.id);
+    const suffix = next && next.id !== weapon.id ? ` · 切换 ${next.name}` : '';
+    this.showPickupToast(`${weapon.name} 弹药耗尽${suffix}`, '#ff8a93');
+    this.sfx.empty();
+  }
+
+  showPickupToast(text, color) {
+    this.pickupToast = {
+      text,
+      color: color || '#dfe9f5',
+      until: this.currentTime + 1600,
+    };
   }
 
   damagePlayer() {
@@ -626,6 +764,11 @@ export class Game {
       // 掩体
       for (const c of this.level.covers) {
         if (this.isVisible(c.x, c.w)) c.draw(ctx);
+      }
+
+      // 掉落物：在角色之后、敌人之前，避免遮住战斗主体
+      for (const pk of this.pickups) {
+        if (this.isVisible(pk.x, pk.w)) pk.draw(ctx, this.currentTime);
       }
 
       for (const g of this.grenades) g.draw(ctx);
@@ -941,6 +1084,153 @@ export class Game {
       }
       ctx.restore();
     }
+
+    this.drawWeaponHud(ctx);
+    this.drawPickupToast(ctx);
+  }
+
+  // 底部中央：当前武器 + 余弹 + 背包槽（只在有弹药的武器之间切换）
+  drawWeaponHud(ctx) {
+    const p = this.player;
+    if (!p) return;
+    const w = p.getWeapon();
+    if (!w) return;
+    const ammo = p.ammo[w.id];
+    const panelW = 154;
+    const panelH = 22;
+    const px = Math.round((this.logicalW - panelW) / 2);
+    const py = this.logicalH - panelH - 4;
+
+    ctx.save();
+    // 切角面板
+    ctx.fillStyle = 'rgba(2,5,9,0.80)';
+    ctx.fillRect(px + 2, py, panelW - 4, panelH);
+    ctx.fillRect(px, py + 2, panelW, panelH - 4);
+    ctx.fillStyle = 'rgba(8,15,23,0.92)';
+    ctx.fillRect(px + 2, py + 2, panelW - 4, panelH - 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillRect(px + 2, py, panelW - 4, 1);
+    ctx.fillRect(px + 2, py + panelH - 1, panelW - 4, 1);
+    ctx.fillStyle = w.color;
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(px, py + 2, 1, panelH - 4);
+    ctx.globalAlpha = 0.18;
+    ctx.fillRect(px + 2, py + panelH - 2, panelW - 4, 1);
+    ctx.globalAlpha = 1;
+
+    // 武器小图标
+    this.drawWeaponGlyph(ctx, w, px + 7, py + 7, w.color);
+
+    // 名称
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#9fb3c8';
+    ctx.font = '6px monospace';
+    ctx.fillText(w.name, px + 24, py + 10);
+
+    // 弹药
+    const low = !w.infiniteAmmo && ammo <= 10;
+    const ammoText = w.infiniteAmmo ? '∞' : String(ammo);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#5b6b7e';
+    ctx.font = '5px monospace';
+    ctx.fillText('AMMO', px + 100, py + 7);
+    ctx.fillStyle = low ? '#ff5a5a' : w.color;
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText(ammoText, px + 100, py + 18);
+
+    // 分隔线
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillRect(px + 104, py + 4, 1, panelH - 8);
+
+    // 背包槽
+    let sx = px + 109;
+    const sy = py + 4;
+    for (const id of p.weaponIds) {
+      const cfg = GameConfig.WEAPONS.find((item) => item.id === id);
+      if (!cfg) continue;
+      const active = id === w.id;
+      ctx.fillStyle = active ? 'rgba(255,255,255,0.11)' : 'rgba(255,255,255,0.035)';
+      ctx.fillRect(sx, sy, 12, 14);
+
+      ctx.globalAlpha = active ? 1 : 0.55;
+      ctx.fillStyle = cfg.color;
+      ctx.fillRect(sx, sy, 12, 2);
+      ctx.fillRect(sx + 2, sy + 6, 8, 1);
+      ctx.fillRect(sx + 4, sy + 7, 3, 2);
+      ctx.globalAlpha = 1;
+
+      const cellAmmo = cfg.infiniteAmmo ? '∞' : String(p.ammo[id] ?? 0);
+      ctx.textAlign = 'right';
+      ctx.font = '5px monospace';
+      ctx.fillStyle = active ? '#ffffff' : '#7c8fa3';
+      ctx.fillText(cellAmmo, sx + 11, sy + 13);
+
+      if (active) {
+        ctx.fillStyle = '#e9f7ff';
+        ctx.fillRect(sx, sy, 12, 1);
+        ctx.fillRect(sx, sy + 13, 12, 1);
+        ctx.fillRect(sx, sy, 1, 14);
+        ctx.fillRect(sx + 11, sy, 1, 14);
+      }
+      sx += 14;
+    }
+    ctx.restore();
+  }
+
+  drawWeaponGlyph(ctx, weapon, x, y, color) {
+    ctx.save();
+    ctx.fillStyle = '#05090e';
+    ctx.fillRect(x - 1, y - 1, 13, 10);
+    ctx.fillStyle = color;
+    if (weapon.id === 'rifle') {
+      ctx.fillRect(x, y + 2, 10, 2);
+      ctx.fillRect(x + 8, y + 3, 4, 1);
+      ctx.fillRect(x + 1, y + 4, 3, 3);
+      ctx.fillRect(x + 5, y + 4, 2, 3);
+      ctx.fillStyle = '#dff8ff';
+      ctx.fillRect(x, y + 2, 9, 1);
+    } else if (weapon.id === 'plasma') {
+      ctx.fillRect(x, y + 2, 11, 4);
+      ctx.fillStyle = '#1a5c39';
+      ctx.fillRect(x + 3, y + 3, 5, 3);
+      ctx.fillStyle = '#d9ffe8';
+      ctx.fillRect(x + 5, y + 4, 2, 1);
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y + 1, 2, 1);
+      ctx.fillRect(x + 9, y + 1, 2, 1);
+    } else {
+      ctx.fillRect(x, y + 1, 8, 2);
+      ctx.fillRect(x + 1, y + 3, 3, 4);
+      ctx.fillRect(x + 5, y + 3, 2, 1);
+      ctx.fillStyle = '#fff6c2';
+      ctx.fillRect(x, y + 1, 7, 1);
+    }
+    ctx.restore();
+  }
+
+  drawPickupToast(ctx) {
+    if (!this.pickupToast) return;
+    const remain = this.pickupToast.until - this.currentTime;
+    if (remain <= 0) {
+      this.pickupToast = null;
+      return;
+    }
+    const alpha = Math.min(1, remain / 260);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = 'bold 7px monospace';
+    ctx.textAlign = 'center';
+    const tw = Math.ceil(ctx.measureText(this.pickupToast.text).width);
+    const cx = this.logicalW / 2;
+    const ty = 39;
+    ctx.fillStyle = 'rgba(2,5,9,0.82)';
+    ctx.fillRect(cx - tw / 2 - 6, ty - 8, tw + 12, 11);
+    ctx.fillStyle = this.pickupToast.color;
+    ctx.fillRect(cx - tw / 2 - 6, ty - 8, 1, 11);
+    ctx.fillRect(cx + tw / 2 + 5, ty - 8, 1, 11);
+    ctx.fillStyle = this.pickupToast.color;
+    ctx.fillText(this.pickupToast.text, cx, ty);
+    ctx.restore();
   }
 
   destroy() {

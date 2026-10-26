@@ -98,12 +98,42 @@ export const GameConfig = {
     neon: ['#ff2e88', '#00e5ff', '#b14aed', '#39ff88', '#ff8a3d'],
   },
 
-  // 武器槽接口
+  // 武器槽接口：手枪为无限弹药的保底武器，拾取武器有独立弹量。
   WEAPONS: [
-    { id: 'pistol', name: '手枪', color: '#ffe066', fireInterval: 110, bulletSpeed: 6.5, bulletDamage: 1 },
-    { id: 'rifle', name: '步枪', color: '#5fe6ff', fireInterval: 75, bulletSpeed: 7.5, bulletDamage: 1 },
-    { id: 'plasma', name: '线光线弹枪', color: '#39ff88', fireInterval: 160, bulletSpeed: 5.5, bulletDamage: 2 },
+    {
+      id: 'pistol', name: '手枪', color: '#ffe066',
+      fireInterval: 110, bulletSpeed: 6.5, bulletDamage: 1,
+      infiniteAmmo: true,
+    },
+    {
+      id: 'rifle', name: '突击步枪', color: '#5fe6ff',
+      fireInterval: 75, bulletSpeed: 7.5, bulletDamage: 1,
+      pickupAmmo: 60, maxAmmo: 180,
+    },
+    {
+      id: 'plasma', name: '线光线弹枪', color: '#39ff88',
+      fireInterval: 160, bulletSpeed: 5.5, bulletDamage: 2,
+      pickupAmmo: 24, maxAmmo: 60,
+    },
   ],
+
+  // 掉落与拾取
+  LOOT: {
+    dropChance: 0.34,       // 普通暴徒掉落概率
+    pityKills: 4,           // 连续 4 次未掉落，下一次必掉（防止整关无补给）
+    maxPickups: 6,          // 场上同时存在的拾取物上限
+    pickupArmDelay: 320,    // 掉落物落地前不吸附，避免贴脸击杀瞬间被吞
+    healthScore: 150,       // 满血时医疗包折算分数
+    ammoScore: 120,         // 无有限弹武器时弹药箱折算分数
+    drops: [
+      { type: 'health', weight: 36 },
+      { type: 'ammo', weight: 28 },
+      { type: 'rifle', weight: 22 },
+      { type: 'plasma', weight: 14 },
+    ],
+    weaponAmmo: { rifle: 60, plasma: 24 },
+    ammoBox: { rifle: 30, plasma: 12 },
+  },
 };
 
 // 关卡元信息（用于选关界面），真正的关卡布局在 src/data/levels.json

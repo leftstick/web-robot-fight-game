@@ -105,4 +105,13 @@ export class Sfx {
   click() {
     this._tone({ freq: 520, slideTo: 780, type: 'square', dur: 0.06, vol: 0.14 });
   }
+
+  pickup() {
+    this._tone({ freq: 660, slideTo: 990, type: 'square', dur: 0.08, vol: 0.16 });
+    this._tone({ freq: 990, slideTo: 1320, type: 'triangle', dur: 0.12, vol: 0.12, delay: 0.07 });
+  }
+
+  empty() {
+    this._tone({ freq: 190, slideTo: 85, type: 'square', dur: 0.12, vol: 0.13 });
+  }
 }

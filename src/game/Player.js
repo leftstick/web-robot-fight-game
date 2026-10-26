@@ -4,6 +4,7 @@ import { Grenade } from './Grenade.js';
 import { getSprites, ANIM } from './SpriteSheet.js';
 
 const P = GameConfig.PLAYER;
+const WEAPON_BY_ID = new Map(GameConfig.WEAPONS.map((w) => [w.id, w]));
 
 function aabb(a, b) {
   return a.x < b.x + b.width && a.x + a.width > b.x &&
@@ -27,13 +28,16 @@ export class Player {
     this.onGround = true;
     this.facing = 1;            // +1 朝右 / -1 朝左
     this.crouching = false;
+    this.wantsCrouch = false;   // 输入意图；矮空间内会保持蹲伏
     this.jumpsLeft = 0;
 
     this.moveLeft = false;
     this.moveRight = false;
     this.wantJump = false;
     this.aiming = false;        // LT 举枪瞄准（移动减速）
-    this.weaponIndex = 0;       // 当前武器槽（切枪占位）
+    this.weaponIndex = 0;       // 当前武器在 weaponIds 中的下标
+    this.weaponIds = ['pistol'];
+    this.ammo = { pistol: Infinity };
 
     this.lastFire = -9999;
     this.lastGrenade = -9999;
@@ -64,11 +68,14 @@ export class Player {
     this.onGround = true;
     this.facing = 1;
     this.crouching = false;
+    this.wantsCrouch = false;
     this.moveLeft = false;
     this.moveRight = false;
     this.wantJump = false;
     this.aiming = false;
     this.weaponIndex = 0;
+    this.weaponIds = ['pistol'];
+    this.ammo = { pistol: Infinity };
     this.lastFire = -9999;
     this.lastGrenade = -9999;
     this.meleeMode = false;
@@ -97,6 +104,31 @@ export class Player {
     this.y = feet - this.height;
   }
 
+  // 站立所需空间是否被平台挡住（用于矮空间内松键后保持蹲姿）
+  hasHeadroom(platforms) {
+    if (!this.crouching) return true;
+    const feet = this.y + this.height;
+    const box = {
+      x: this.x,
+      y: feet - this.standHeight,
+      width: this.width,
+      height: this.standHeight,
+    };
+    for (const p of platforms || []) {
+      if (aabb(box, { x: p.x, y: p.y, width: p.w, height: p.h })) return false;
+    }
+    return true;
+  }
+
+  updateCrouch(platforms) {
+    if (this.wantsCrouch) {
+      if (this.onGround && !this.crouching) this.setCrouch(true);
+      return;
+    }
+    // 松开蹲键：头顶没有阻挡才站起，否则继续蹲着挪出去
+    if (this.crouching && this.hasHeadroom(platforms)) this.setCrouch(false);
+  }
+
   jump() {
     if (this.onGround) {
       this.vy = P.jumpSpeed;
@@ -114,6 +146,10 @@ export class Player {
 
   update(dtf, world, currentTime) {
     this._t = currentTime || 0;
+
+    // 先响应蹲伏意图，再移动；移动结束若已走出矮空间则尝试站起
+    this.updateCrouch(world.platforms);
+
     // —— 水平 ——
     let move = 0;
     if (this.moveLeft) move -= 1;
@@ -148,6 +184,7 @@ export class Player {
       this.fellOut = true;
     }
 
+    this.updateCrouch(world.platforms);
     this.updateMeleePhase(currentTime || 0);
     this.animTime += dtf;
   }
@@ -182,12 +219,23 @@ export class Player {
   }
 
   // —— 开火（水平）——
+  // 返回 { weapon, emptied }；无弹药时返回 null。
   tryFire(currentTime) {
-    const interval = this.getWeapon().fireInterval || P.fireInterval;
-    if (currentTime - this.lastFire < interval) return false;
+    const w = this.getWeapon();
+    if (!w) return null;
+    if (!w.infiniteAmmo && !((this.ammo[w.id] || 0) > 0)) return null;
+
+    const interval = w.fireInterval || P.fireInterval;
+    if (currentTime - this.lastFire < interval) return null;
     this.lastFire = currentTime;
     this.shootAnimUntil = currentTime + 130;
-    return true;
+
+    let emptied = false;
+    if (!w.infiniteAmmo) {
+      this.ammo[w.id] = Math.max(0, (this.ammo[w.id] || 0) - 1);
+      emptied = this.ammo[w.id] === 0;
+    }
+    return { weapon: w, emptied };
   }
 
   getGunHeight() {
@@ -204,12 +252,12 @@ export class Player {
   }
 
   getWeapon() {
-    const list = GameConfig.WEAPONS;
-    return list[this.weaponIndex % list.length];
+    const id = this.weaponIds[this.weaponIndex] || 'pistol';
+    return WEAPON_BY_ID.get(id) || GameConfig.WEAPONS[0];
   }
 
-  createBullet() {
-    const w = this.getWeapon();
+  createBullet(weapon) {
+    const w = weapon || this.getWeapon();
     const muzzle = this.getMuzzle();
     const x = this.facing > 0 ? muzzle.x : muzzle.x - P.bulletWidth;
     return new Bullet(x, muzzle.y - P.bulletHeight / 2, (w.bulletSpeed || P.bulletSpeed) * this.facing, 0, {
@@ -219,6 +267,78 @@ export class Player {
       color: w.color,
       owner: BulletOwner.PLAYER,
     });
+  }
+
+  // —— 武器背包 ——
+  hasWeapon(id) {
+    return this.weaponIds.includes(id);
+  }
+
+  addWeapon(id, amount) {
+    const cfg = WEAPON_BY_ID.get(id);
+    if (!cfg || cfg.infiniteAmmo) return null;
+
+    const alreadyOwned = this.weaponIds.includes(id);
+    if (!alreadyOwned) this.weaponIds.push(id);
+
+    const before = this.ammo[id] || 0;
+    this.ammo[id] = Math.min(cfg.maxAmmo, before + amount);
+    this.weaponIndex = this.weaponIds.indexOf(id);
+    return {
+      weapon: cfg,
+      isNew: !alreadyOwned,
+      ammo: this.ammo[id],
+      added: this.ammo[id] - before,
+    };
+  }
+
+  addAmmoToFinite() {
+    let restored = 0;
+    for (const id of this.weaponIds) {
+      const cfg = WEAPON_BY_ID.get(id);
+      if (!cfg || cfg.infiniteAmmo) continue;
+      const add = GameConfig.LOOT.ammoBox[id] || 0;
+      if (add <= 0) continue;
+      const before = this.ammo[id] || 0;
+      this.ammo[id] = Math.min(cfg.maxAmmo, before + add);
+      restored += this.ammo[id] - before;
+    }
+    return restored;
+  }
+
+  // 在“仍有弹药”的武器之间循环；只有一把可用武器时返回 null
+  cycleWeapon() {
+    const usable = [];
+    this.weaponIds.forEach((id, i) => {
+      const cfg = WEAPON_BY_ID.get(id);
+      if (cfg && (cfg.infiniteAmmo || (this.ammo[id] || 0) > 0)) usable.push(i);
+    });
+    if (usable.length <= 1) return null;
+
+    const pos = usable.indexOf(this.weaponIndex);
+    this.weaponIndex = usable[(pos + 1) % usable.length];
+    return this.getWeapon();
+  }
+
+  // 弹药耗尽：从背包移除，并自动切到下一把有弹药的武器
+  removeWeapon(id) {
+    const idx = this.weaponIds.indexOf(id);
+    if (idx < 0) return this.getWeapon();
+
+    this.weaponIds.splice(idx, 1);
+    delete this.ammo[id];
+
+    if (this.weaponIds.length === 0) {
+      this.weaponIds.push('pistol');
+      this.ammo.pistol = Infinity;
+      this.weaponIndex = 0;
+    } else if (idx === this.weaponIndex) {
+      // 当前枪打空：优先切到背包里的下一把
+      this.weaponIndex = Math.min(idx, this.weaponIds.length - 1);
+    } else if (idx < this.weaponIndex) {
+      this.weaponIndex--;
+    }
+    return this.getWeapon();
   }
 
   // —— 手雷 ——
