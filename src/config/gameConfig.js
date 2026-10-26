@@ -100,14 +100,14 @@ export const GameConfig = {
 
   // 武器槽接口：手枪为无限弹药的保底武器，拾取武器有独立弹量。
   // 三把枪刻意做成三种节奏：
-  //   手枪  —— 精准、无限，单发 1 伤，稳定三枪放倒暴徒；
+  //   手枪  —— 精准、无限，节奏沉稳，单发 1 伤，稳定三枪放倒暴徒；
   //   步枪  —— 全自动高射速 + 小幅散布，压制成群目标但吃弹药；
   //   等离子 —— 慢速重弹，单发 3 伤并溅射，一发清暴徒，打 Boss 也最省弹。
   WEAPONS: [
     {
       id: 'pistol', name: '手枪', color: '#ffe066',
       trait: '精准 · 无限',
-      fireInterval: 130, bulletSpeed: 7.4, bulletDamage: 1,
+      fireInterval: 220, bulletSpeed: 7.4, bulletDamage: 1,
       bulletWidth: 12, bulletHeight: 3,
       spreadDeg: 0,
       bulletStyle: 'pistol', sfx: 'pistol', muzzleScale: 0.5,
