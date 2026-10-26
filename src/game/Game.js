@@ -713,7 +713,8 @@ export class Game {
 
   // ============================================================
   // 渲染：逻辑画布 480x270 → 整数 3x 放大 → 主画布 1440x810
-  // 顺序：远景 → 世界（地面/平台/角色/特效）→ 前景+雨 → 后期 → HUD
+  // 顺序：远景 → 世界（地面/平台/角色/特效）→ 前景+雨 → 后期
+  // 控制提示与武器 HUD 由 DOM 覆盖层绘制，保证文字清晰
   // ============================================================
   render() {
     const ctx = this.lctx; // 逻辑画布上下文
@@ -1085,139 +1086,7 @@ export class Game {
       ctx.restore();
     }
 
-    this.drawWeaponHud(ctx);
-    this.drawControlHints(ctx);
     this.drawPickupToast(ctx);
-  }
-
-  // 左下角：非触屏设备显示按键提示；接入手柄后自动换成手柄按键
-  drawControlHints(ctx) {
-    if (this.state !== GameState.PLAYING) return;
-    const pad = this.input.isPadConnected();
-    if (!pad && this.input.isTouchEnabled()) return;
-
-    const lines = pad
-      ? ['摇杆 移动 · A 跳 · B 蹲',
-         'X/RT 射击 · Y/RB 切枪',
-         'LB 手雷 · R3 劈砍 · Start 暂停']
-      : ['A/D 移动 · W 跳 · S 蹲',
-         '空格 射击 · Q 切枪 · X 劈砍',
-         'G 手雷 · Esc 暂停'];
-
-    ctx.save();
-    ctx.font = '6px monospace';
-    ctx.textAlign = 'left';
-    let maxW = 0;
-    for (const line of lines) maxW = Math.max(maxW, ctx.measureText(line).width);
-
-    const lineH = 8;
-    const panelW = Math.ceil(maxW) + 11;
-    const panelH = lines.length * lineH + 5;
-    const px = 5;
-    const py = this.logicalH - panelH - 4;
-
-    ctx.fillStyle = 'rgba(3,7,12,0.78)';
-    ctx.fillRect(px, py, panelW, panelH);
-    ctx.fillStyle = pad ? '#39ff88' : '#5fe6ff';
-    ctx.globalAlpha = 0.9;
-    ctx.fillRect(px, py, 1, panelH);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = 'rgba(255,255,255,0.10)';
-    ctx.fillRect(px + 1, py, panelW - 1, 1);
-
-    ctx.fillStyle = pad ? '#b6ffcf' : '#b5e1ff';
-    lines.forEach((line, i) => {
-      ctx.fillText(line, px + 5, py + 9 + i * lineH);
-    });
-    ctx.restore();
-  }
-
-  // 底部中央：当前武器 + 余弹 + 背包槽（只在有弹药的武器之间切换）
-  drawWeaponHud(ctx) {
-    const p = this.player;
-    if (!p) return;
-    const w = p.getWeapon();
-    if (!w) return;
-    const ammo = p.ammo[w.id];
-    const panelW = 154;
-    const panelH = 22;
-    const px = Math.round((this.logicalW - panelW) / 2);
-    const py = this.logicalH - panelH - 4;
-
-    ctx.save();
-    // 切角面板
-    ctx.fillStyle = 'rgba(2,5,9,0.80)';
-    ctx.fillRect(px + 2, py, panelW - 4, panelH);
-    ctx.fillRect(px, py + 2, panelW, panelH - 4);
-    ctx.fillStyle = 'rgba(8,15,23,0.92)';
-    ctx.fillRect(px + 2, py + 2, panelW - 4, panelH - 4);
-    ctx.fillStyle = 'rgba(255,255,255,0.10)';
-    ctx.fillRect(px + 2, py, panelW - 4, 1);
-    ctx.fillRect(px + 2, py + panelH - 1, panelW - 4, 1);
-    ctx.fillStyle = w.color;
-    ctx.globalAlpha = 0.85;
-    ctx.fillRect(px, py + 2, 1, panelH - 4);
-    ctx.globalAlpha = 0.18;
-    ctx.fillRect(px + 2, py + panelH - 2, panelW - 4, 1);
-    ctx.globalAlpha = 1;
-
-    // 武器小图标
-    this.drawWeaponGlyph(ctx, w, px + 7, py + 7, w.color);
-
-    // 名称
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#9fb3c8';
-    ctx.font = '6px monospace';
-    ctx.fillText(w.name, px + 24, py + 10);
-
-    // 弹药
-    const low = !w.infiniteAmmo && ammo <= 10;
-    const ammoText = w.infiniteAmmo ? '∞' : String(ammo);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#5b6b7e';
-    ctx.font = '5px monospace';
-    ctx.fillText('AMMO', px + 100, py + 7);
-    ctx.fillStyle = low ? '#ff5a5a' : w.color;
-    ctx.font = 'bold 11px monospace';
-    ctx.fillText(ammoText, px + 100, py + 18);
-
-    // 分隔线
-    ctx.fillStyle = 'rgba(255,255,255,0.10)';
-    ctx.fillRect(px + 104, py + 4, 1, panelH - 8);
-
-    // 背包槽
-    let sx = px + 109;
-    const sy = py + 4;
-    for (const id of p.weaponIds) {
-      const cfg = GameConfig.WEAPONS.find((item) => item.id === id);
-      if (!cfg) continue;
-      const active = id === w.id;
-      ctx.fillStyle = active ? 'rgba(255,255,255,0.11)' : 'rgba(255,255,255,0.035)';
-      ctx.fillRect(sx, sy, 12, 14);
-
-      ctx.globalAlpha = active ? 1 : 0.55;
-      ctx.fillStyle = cfg.color;
-      ctx.fillRect(sx, sy, 12, 2);
-      ctx.fillRect(sx + 2, sy + 6, 8, 1);
-      ctx.fillRect(sx + 4, sy + 7, 3, 2);
-      ctx.globalAlpha = 1;
-
-      const cellAmmo = cfg.infiniteAmmo ? '∞' : String(p.ammo[id] ?? 0);
-      ctx.textAlign = 'right';
-      ctx.font = '5px monospace';
-      ctx.fillStyle = active ? '#ffffff' : '#7c8fa3';
-      ctx.fillText(cellAmmo, sx + 11, sy + 13);
-
-      if (active) {
-        ctx.fillStyle = '#e9f7ff';
-        ctx.fillRect(sx, sy, 12, 1);
-        ctx.fillRect(sx, sy + 13, 12, 1);
-        ctx.fillRect(sx, sy, 1, 14);
-        ctx.fillRect(sx + 11, sy, 1, 14);
-      }
-      sx += 14;
-    }
-    ctx.restore();
   }
 
   drawWeaponGlyph(ctx, weapon, x, y, color) {

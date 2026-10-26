@@ -85,6 +85,8 @@ body::before {
   max-width: 1440px;
   max-height: 810px;
   aspect-ratio: 16 / 9;
+  /* 让 HUD 字号/尺寸跟随游戏容器而不是视口，非 16:9 窗口下也不跑比例 */
+  container-type: size;
   background: #000;
   border: 1px solid #162434;
   border-radius: 0;
@@ -460,23 +462,30 @@ body::before {
 .menu-hint {
   position: absolute;
   bottom: 20px;
-  color: var(--text-muted);
-  font-family: 'Consolas', 'SFMono-Regular', 'Courier New', monospace;
-  font-size: 12px;
-  letter-spacing: 1px;
+  color: #a9bdd2;
+  font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  line-height: 1.7;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+  text-align: center;
+  padding: 0 16px;
 }
 
 .controls-hint {
   position: static;
-  color: #9fb3c8;
-  font-family: 'Consolas', 'SFMono-Regular', 'Courier New', monospace;
-  font-size: 12px;
-  letter-spacing: 1px;
+  color: #c3d8ee;
+  font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
   text-align: center;
   max-width: 90%;
-  line-height: 1.9;
+  line-height: 1.75;
   margin-top: 24px;
   padding: 0 16px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
 }
 
 .controls-hint p {
@@ -485,13 +494,256 @@ body::before {
 
 .controls-hint-menu {
   margin-top: 8px;
-  color: var(--primary-color);
-  opacity: 0.9;
+  color: #7fd6ff;
+  opacity: 1;
+  font-size: 12px;
+  letter-spacing: 0.1px;
 }
 
 #controlsHint.pad {
+  color: #7dffb0;
+  opacity: 1;
+}
+
+/* 游戏内控制提示：DOM 原生分辨率渲染，不受 480x270 画布放大与 CRT 后期影响 */
+.control-hint-overlay {
+  display: none;
+  position: absolute;
+  left: 14px;
+  bottom: 1.5%;
+  z-index: 7;
+  padding: 8px 12px 9px 14px;
+  color: #d8ecff;
+  font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC', sans-serif;
+  font-size: clamp(13px, 1.85cqh, 16px);
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.1px;
+  white-space: nowrap;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(4, 10, 17, 0.9) 0%, rgba(3, 8, 14, 0.8) 100%);
+  border: 1px solid rgba(95, 230, 255, 0.14);
+  border-left: 2px solid #5fe6ff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 6px 18px rgba(0, 0, 0, 0.45);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.control-hint-overlay.visible {
+  display: block;
+}
+
+.control-hint-overlay p {
+  margin: 0;
+}
+
+.control-hint-overlay b {
+  color: #7fe9ff;
+  font-weight: 700;
+}
+
+.control-hint-overlay .sep {
+  color: rgba(216, 236, 255, 0.38);
+  margin: 0 1px;
+}
+
+.control-hint-overlay.pad {
+  border-left-color: #39ff88;
+  border-color: rgba(57, 255, 136, 0.18);
+  color: #d9ffe8;
+}
+
+.control-hint-overlay.pad b {
   color: #39ff88;
-  opacity: 0.9;
+}
+
+/* 极窄窗口下让位给底部武器 HUD，避免两块面板重叠 */
+@container (max-width: 600px) {
+  .control-hint-overlay.visible {
+    display: none;
+  }
+}
+
+/* 底部武器 HUD：文字 DOM 渲染，图标保持像素风 */
+.weapon-hud {
+  --weapon-color: #ffe066;
+  display: none;
+  position: absolute;
+  left: 50%;
+  bottom: 1.48%;
+  transform: translateX(-50%);
+  width: 32.08%;
+  height: clamp(46px, 8.15cqh, 80px);
+  z-index: 5;
+  align-items: center;
+  gap: clamp(6px, 0.8cqh, 10px);
+  padding: 0 clamp(8px, 1.1cqh, 14px);
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(8, 15, 23, 0.94) 0%, rgba(2, 5, 9, 0.88) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  clip-path: polygon(
+    0 0,
+    calc(100% - 6px) 0,
+    100% 6px,
+    100% 100%,
+    6px 100%,
+    0 calc(100% - 6px)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 4px 18px rgba(0, 0, 0, 0.45);
+}
+
+.weapon-hud.visible {
+  display: flex;
+}
+
+.weapon-hud::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--weapon-color);
+  opacity: 0.85;
+}
+
+.weapon-id {
+  display: flex;
+  align-items: center;
+  gap: clamp(5px, 0.7cqh, 9px);
+  min-width: 0;
+}
+
+.weapon-main-icon {
+  flex: 0 0 auto;
+  height: clamp(22px, 3.8cqh, 36px);
+  width: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.weapon-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.weapon-kicker,
+.weapon-ammo-label {
+  font-size: clamp(8px, 1.1cqh, 10px);
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: #5b6b7e;
+  line-height: 1;
+}
+
+.weapon-name {
+  font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC', sans-serif;
+  font-size: clamp(12px, 2cqh, 18px);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: #dbe9f6;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.weapon-ammo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.weapon-ammo-value {
+  font-family: 'Consolas', 'SFMono-Regular', 'Courier New', monospace;
+  font-size: clamp(18px, 3.1cqh, 30px);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--weapon-color);
+  text-shadow: 0 0 8px currentColor;
+  font-variant-numeric: tabular-nums;
+}
+
+.weapon-ammo-value.low {
+  color: #ff5a5a;
+  text-shadow: 0 0 8px rgba(255, 90, 90, 0.65);
+}
+
+.weapon-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 60%;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.weapon-slots {
+  display: flex;
+  align-items: center;
+  gap: clamp(3px, 0.45cqh, 5px);
+  flex: 0 0 auto;
+}
+
+.weapon-slot {
+  --slot-color: #9fb3c8;
+  position: relative;
+  width: clamp(28px, 3.6cqh, 36px);
+  height: clamp(34px, 4.8cqh, 48px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.035);
+  overflow: hidden;
+}
+
+.weapon-slot::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--slot-color);
+  opacity: 0.55;
+}
+
+.weapon-slot.active {
+  background: rgba(255, 255, 255, 0.11);
+  box-shadow: inset 0 0 0 1px rgba(233, 247, 255, 0.75);
+}
+
+.weapon-slot.active::before {
+  opacity: 1;
+}
+
+.weapon-slot-icon {
+  width: 72%;
+  height: auto;
+  margin-bottom: 5px;
+  opacity: 0.55;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.weapon-slot.active .weapon-slot-icon {
+  opacity: 1;
+}
+
+.weapon-slot-ammo {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  font-family: 'Consolas', 'SFMono-Regular', 'Courier New', monospace;
+  font-size: clamp(10px, 1.4cqh, 13px);
+  font-weight: 700;
+  color: #cfe1f1;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 手柄按键图例（仅手柄连接时显示，位于画布底部中央） */

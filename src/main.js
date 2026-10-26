@@ -8,6 +8,17 @@ const INPUT_HINTS = {
   touch: '触屏：左摇杆 移动，下推蹲 · 右侧按钮 射击 / 跳 / 蹲 / 切枪',
   keyboardMenu: '菜单：方向键 选择 · 空格 / 回车 确认 · Backspace 返回',
   padMenu: '菜单：D-pad / 左摇杆 选择 · A 确认 · B 返回',
+  // 游戏内提示分三行，短句更适合快速扫读；键名用 <b> 高亮
+  keyboardLines: [
+    '<b>A</b>/<b>D</b> 移动 <span class="sep">·</span> <b>W</b> 跳 <span class="sep">·</span> <b>S</b> 蹲',
+    '<b>空格</b> 射击 <span class="sep">·</span> <b>Q</b> 切枪 <span class="sep">·</span> <b>X</b> 劈砍',
+    '<b>G</b> 手雷 <span class="sep">·</span> <b>Esc</b> 暂停',
+  ],
+  padLines: [
+    '<b>左摇杆</b> 移动 <span class="sep">·</span> <b>A</b> 跳 <span class="sep">·</span> <b>B</b> 蹲',
+    '<b>X</b>/<b>RT</b> 射击 <span class="sep">·</span> <b>Y</b>/<b>RB</b> 切枪',
+    '<b>LB</b> 手雷 <span class="sep">·</span> <b>R3</b> 劈砍 <span class="sep">·</span> <b>Start</b> 暂停',
+  ],
 };
 
 class GameApp {
@@ -47,6 +58,26 @@ class GameApp {
     this.pauseMenuHint = document.getElementById('pauseMenuHint');
     this.gameOverMenuHint = document.getElementById('gameOverMenuHint');
     this.menuHints = document.querySelectorAll('.menu-hint');
+
+    // 游戏内 DOM 提示与武器 HUD
+    this.controlHintOverlay = document.getElementById('controlHintOverlay');
+    this.controlHintLines = [
+      document.getElementById('chLine1'),
+      document.getElementById('chLine2'),
+      document.getElementById('chLine3'),
+    ];
+    this.weaponHud = document.getElementById('weaponHud');
+    this.weaponMainIcon = document.getElementById('weaponMainIcon');
+    this.weaponName = document.getElementById('weaponName');
+    this.weaponAmmo = document.getElementById('weaponAmmo');
+    this.weaponSlots = document.getElementById('weaponSlots');
+    this.weaponSlotEls = new Map();
+    this._weaponIconId = null;
+    this._weaponIdsSig = '';
+    this._weaponAmmoText = '';
+    this._weaponLow = false;
+    this._weaponColor = '';
+    this._activeSlotId = null;
 
     // 菜单导航：当前屏幕的可选项、选中下标（键盘/手柄共用同一套）
     this.menuScreen = null;
@@ -113,6 +144,125 @@ class GameApp {
     this.menuHints.forEach((el) => {
       el.style.display = (touch && !pad) ? 'none' : '';
     });
+
+    // 游戏内控制提示：仅非触屏 / 已接手柄且正在战斗时显示
+    const lines = pad ? INPUT_HINTS.padLines : (touch ? null : INPUT_HINTS.keyboardLines);
+    if (this.controlHintOverlay) {
+      if (lines) {
+        this.controlHintLines.forEach((el, i) => {
+          if (el) el.innerHTML = lines[i] || '';
+        });
+        this.controlHintOverlay.classList.toggle('pad', pad);
+      }
+      const showHint = !!lines && this.game.state === GameState.PLAYING;
+      this.controlHintOverlay.classList.toggle('visible', showHint);
+    }
+  }
+
+  // 武器 HUD：文本与背包槽走 DOM，图标仍用像素绘制，避免 6px 画布文字发虚
+  updateWeaponHud() {
+    if (!this.weaponHud) return;
+
+    const p = this.game.player;
+    const playing = this.game.state === GameState.PLAYING && !!p;
+    this.weaponHud.classList.toggle('visible', playing);
+    if (!playing) return;
+
+    const w = p.getWeapon();
+    if (!w) {
+      this.weaponHud.classList.remove('visible');
+      return;
+    }
+
+    if (this._weaponColor !== w.color) {
+      this.weaponHud.style.setProperty('--weapon-color', w.color);
+      this._weaponColor = w.color;
+    }
+
+    if (this.weaponName.textContent !== w.name) {
+      this.weaponName.textContent = w.name;
+    }
+
+    const ammo = p.ammo[w.id];
+    const ammoText = w.infiniteAmmo ? '∞' : String(ammo ?? 0);
+    if (ammoText !== this._weaponAmmoText) {
+      this.weaponAmmo.textContent = ammoText;
+      this._weaponAmmoText = ammoText;
+    }
+
+    const low = !w.infiniteAmmo && (ammo ?? 0) <= 10;
+    if (low !== this._weaponLow) {
+      this.weaponAmmo.classList.toggle('low', low);
+      this._weaponLow = low;
+    }
+
+    if (this._weaponIconId !== w.id) {
+      this.drawWeaponIcon(this.weaponMainIcon, w, 3);
+      this._weaponIconId = w.id;
+    }
+
+    const idsSig = p.weaponIds.join(',');
+    if (idsSig !== this._weaponIdsSig) {
+      this.rebuildWeaponSlots(p);
+      this._weaponIdsSig = idsSig;
+      this._activeSlotId = null;
+    }
+
+    for (const id of p.weaponIds) {
+      const refs = this.weaponSlotEls.get(id);
+      if (!refs) continue;
+      const cfg = GameConfig.WEAPONS.find((item) => item.id === id);
+      const slotAmmo = cfg && cfg.infiniteAmmo ? '∞' : String(p.ammo[id] ?? 0);
+      if (refs.ammo.textContent !== slotAmmo) refs.ammo.textContent = slotAmmo;
+    }
+
+    if (this._activeSlotId !== w.id) {
+      for (const [id, refs] of this.weaponSlotEls) {
+        refs.slot.classList.toggle('active', id === w.id);
+      }
+      this._activeSlotId = w.id;
+    }
+  }
+
+  rebuildWeaponSlots(player) {
+    if (!this.weaponSlots) return;
+    this.weaponSlots.innerHTML = '';
+    this.weaponSlotEls.clear();
+
+    for (const id of player.weaponIds) {
+      const cfg = GameConfig.WEAPONS.find((item) => item.id === id);
+      if (!cfg) continue;
+
+      const slot = document.createElement('div');
+      slot.className = 'weapon-slot';
+      slot.style.setProperty('--slot-color', cfg.color);
+      slot.title = cfg.name;
+
+      const icon = document.createElement('canvas');
+      icon.className = 'weapon-slot-icon';
+      this.drawWeaponIcon(icon, cfg, 2);
+
+      const ammo = document.createElement('span');
+      ammo.className = 'weapon-slot-ammo';
+
+      slot.appendChild(icon);
+      slot.appendChild(ammo);
+      this.weaponSlots.appendChild(slot);
+      this.weaponSlotEls.set(id, { slot, ammo });
+    }
+  }
+
+  drawWeaponIcon(canvas, weapon, scale) {
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    canvas.width = 14 * scale;
+    canvas.height = 11 * scale;
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.scale(scale, scale);
+    this.game.drawWeaponGlyph(ctx, weapon, 1, 1, weapon.color);
+    ctx.restore();
   }
 
   setupGameCallbacks() {
@@ -121,8 +271,11 @@ class GameApp {
     this.game.onLivesChange = (lives) => this.updateLives(lives);
     this.game.onEnemyCountChange = (count) => this.updateEnemyCount(count);
     this.game.onLevelChange = (level) => this.updateLevel(level);
-    // 每帧读统一输入信号，驱动菜单选择（键盘方向键 + 手柄 D-pad/摇杆 + A/回车确认）
-    this.game.onFrame = (input) => this.updateMenuNav(input);
+    // 每帧读统一输入信号，驱动菜单选择与武器 HUD 同步
+    this.game.onFrame = (input) => {
+      this.updateMenuNav(input);
+      this.updateWeaponHud();
+    };
     // 手柄热插拔：显示/隐藏按键图例并弹出提示
     this.game.input.onPadChange = (connected, id) => this.onPadChange(connected, id);
   }
@@ -362,6 +515,7 @@ class GameApp {
   quitToMenu() {
     this.game.state = GameState.MENU;
     this.hud.container.style.display = 'none';
+    this.updateWeaponHud();
     this.showScreen('start');
   }
 
@@ -384,6 +538,7 @@ class GameApp {
         break;
     }
     this.updatePadLegend();
+    this.updateWeaponHud();
   }
 
   showGameOver(victory) {

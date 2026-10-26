@@ -105,6 +105,30 @@
           <button class="pause-btn" id="pauseBtn">⏸</button>
         </div>
       </div>
+
+      <!-- 游戏内控制提示：DOM 原生分辨率渲染，避免低分辨率画布文字发虚 -->
+      <div id="controlHintOverlay" class="control-hint-overlay" aria-hidden="true">
+        <p class="ch-line" id="chLine1"></p>
+        <p class="ch-line" id="chLine2"></p>
+        <p class="ch-line" id="chLine3"></p>
+      </div>
+
+      <!-- 底部武器 HUD：文字使用 DOM，图标保持像素风 -->
+      <div id="weaponHud" class="weapon-hud" aria-hidden="true">
+        <div class="weapon-id">
+          <canvas id="weaponMainIcon" class="weapon-main-icon" width="42" height="33"></canvas>
+          <div class="weapon-meta">
+            <span class="weapon-kicker">WEAPON</span>
+            <span class="weapon-name" id="weaponName">手枪</span>
+          </div>
+        </div>
+        <div class="weapon-ammo">
+          <span class="weapon-ammo-label">AMMO</span>
+          <span class="weapon-ammo-value" id="weaponAmmo">∞</span>
+        </div>
+        <span class="weapon-divider" aria-hidden="true"></span>
+        <div class="weapon-slots" id="weaponSlots"></div>
+      </div>
       
       <!-- 暂停界面 -->
       <div id="pauseScreen" class="screen pause-screen">
