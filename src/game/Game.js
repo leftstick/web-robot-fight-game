@@ -562,6 +562,7 @@ export class Game {
   updateBullets(dtf) {
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
+      if (!b) continue;
       b.update(dtf);
       this.resolveBullet(b);
 
@@ -889,7 +890,11 @@ export class Game {
     };
     this.cinematic = 'bossDeath';
     this.shockwaves = [];
-    this.bullets = this.bullets.filter((b) => b.owner !== BulletOwner.ENEMY);
+    // 不能重建数组：这里可能在 updateBullets 的循环中被调用，
+    // 替换 this.bullets 会让循环索引越界，导致整帧抛错卡死。
+    for (const b of this.bullets) {
+      if (b.owner === BulletOwner.ENEMY) b.active = false;
+    }
     this.addScreenShake(26, 13);
     this.addHitStop(180);
     this.whiteFlash = 0.75;
