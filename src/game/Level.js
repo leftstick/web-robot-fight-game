@@ -96,7 +96,12 @@ function scaleLevel(d) {
       x: Math.round(e.x * SCALE),
       y: e.y != null ? Math.round(e.y * SCALE) : undefined,
     })),
-    boss: d.boss ? { x: Math.round(d.boss.x * SCALE), hp: d.boss.hp } : null,
+    boss: d.boss ? {
+      x: Math.round(d.boss.x * SCALE),
+      hp: d.boss.hp,
+      name: d.boss.name || '帮派首领',
+      title: d.boss.title || 'GANG LORD // 帮派首领',
+    } : null,
   };
 }
 
@@ -119,7 +124,12 @@ export class Level {
       y: e.y != null ? e.y : GameConfig.GROUND_Y,
     }));
 
-    this.boss = data.boss ? { x: data.boss.x, hp: data.boss.hp || GameConfig.BOSS.hp } : null;
+    this.boss = data.boss ? {
+      x: data.boss.x,
+      hp: data.boss.hp || GameConfig.BOSS.hp,
+      name: data.boss.name || '帮派首领',
+      title: data.boss.title || 'GANG LORD // 帮派首领',
+    } : null;
 
     this.playerSpawn = {
       x: data.playerSpawn ? data.playerSpawn.x : 60,

@@ -130,6 +130,32 @@
         <div class="weapon-slots" id="weaponSlots"></div>
       </div>
       
+      <!-- BOSS 入场演出：上下黑边 + 名牌，1.8 秒后自动收起 -->
+      <div id="bossIntro" class="boss-intro" aria-hidden="true">
+        <span class="boss-intro-bar top"></span>
+        <span class="boss-intro-bar bottom"></span>
+        <div class="boss-intro-card">
+          <p class="boss-intro-kicker">TARGET ACQUIRED</p>
+          <h2 class="boss-intro-name" id="bossIntroName">帮派首领</h2>
+          <p class="boss-intro-title" id="bossIntroTitle">GANG LORD // 帮派首领</p>
+          <div class="boss-intro-meta">
+            <span id="bossIntroPhase">PHASE 1 / 3</span>
+            <span id="bossIntroHp">HP 120</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 阶段切换闪屏 -->
+      <div id="bossPhaseFlash" class="boss-phase-flash" aria-hidden="true">
+        <span id="bossPhaseFlashText">PHASE 2</span>
+      </div>
+
+      <!-- BOSS 击破横幅：死亡慢镜头期间显示 -->
+      <div id="bossDeathBanner" class="boss-death-banner" aria-hidden="true">
+        <p class="bd-kicker">TARGET ELIMINATED</p>
+        <h2 class="bd-name" id="bossDeathName">帮派首领</h2>
+      </div>
+
       <!-- 暂停界面 -->
       <div id="pauseScreen" class="screen pause-screen">
         <h2 class="screen-title">游戏暂停</h2>
@@ -143,30 +169,67 @@
         </div>
       </div>
       
-      <!-- 结算界面 -->
-      <div id="gameOverScreen" class="screen">
-        <h2 class="result-title" id="resultTitle">胜利!</h2>
-        <div class="result-stats">
-          <div class="stat-item">
-            <span class="stat-label">关卡</span>
-            <span class="stat-value" id="resultLevel">1</span>
+      <!-- 结算界面：任务简报卡片 + 评级 + 战斗统计 -->
+      <div id="gameOverScreen" class="screen result-screen">
+        <div class="result-card" id="resultCard">
+          <div class="result-head">
+            <div class="result-headline">
+              <p class="result-kicker" id="resultKicker">MISSION CLEAR</p>
+              <h2 class="result-title" id="resultTitle">任务完成</h2>
+              <p class="result-sub" id="resultSub">街区霸主已被清除</p>
+            </div>
+            <div class="result-rank">
+              <div class="rank-badge" id="rankBadge" data-rank="S"><span id="rankLetter">S</span></div>
+              <div class="rank-copy">
+                <span class="rank-label">评价</span>
+                <span class="rank-note" id="rankNote">完美压制</span>
+              </div>
+            </div>
           </div>
-          <div class="stat-item">
-            <span class="stat-label">得分</span>
-            <span class="stat-value" id="resultScore">0</span>
+
+          <div class="result-tagline">
+            <span class="result-level">LEVEL <b id="resultLevel">01</b></span>
+            <span class="result-divider" aria-hidden="true"></span>
+            <span class="result-target" id="resultTarget">铁拳·维克</span>
           </div>
-          <div class="stat-item">
-            <span class="stat-label">消灭暴徒</span>
-            <span class="stat-value" id="resultKills">0</span>
+
+          <div class="result-stats">
+            <div class="stat-item">
+              <span class="stat-label">用时</span>
+              <span class="stat-value" id="resultTime">00:00</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">命中率</span>
+              <span class="stat-value" id="resultAccuracy">0%</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">消灭</span>
+              <span class="stat-value" id="resultKills">0</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">受击</span>
+              <span class="stat-value" id="resultDamage">0</span>
+            </div>
           </div>
-        </div>
-        <div class="menu-buttons gameover-buttons">
-          <button class="btn btn-primary selected" id="nextLevelBtn">下一关</button>
-          <button class="btn btn-secondary" id="retryBtn">重试</button>
-          <button class="btn btn-back" id="menuBtn">返回主菜单</button>
-        </div>
-        <div class="menu-hint">
-          <p id="gameOverMenuHint">方向键 选择 · 空格 / 回车 确认 · Backspace 返回主菜单</p>
+
+          <div class="result-score-row">
+            <span class="result-score-label">SCORE</span>
+            <span class="result-score" id="resultScore">0</span>
+          </div>
+
+          <div class="result-reward" id="resultReward">
+            <span class="reward-label">UNLOCKED</span>
+            <span class="reward-value" id="resultRewardValue">LEVEL 02</span>
+          </div>
+
+          <div class="menu-buttons gameover-buttons">
+            <button class="btn btn-primary selected" id="nextLevelBtn">下一关</button>
+            <button class="btn btn-secondary" id="retryBtn">重试</button>
+            <button class="btn btn-back" id="menuBtn">返回主菜单</button>
+          </div>
+          <div class="menu-hint">
+            <p id="gameOverMenuHint">方向键 选择 · 空格 / 回车 确认 · Backspace 返回主菜单</p>
+          </div>
         </div>
       </div>
     </div>

@@ -81,6 +81,19 @@ class GameApp {
     this._weaponTrait = '';
     this._activeSlotId = null;
 
+    // BOSS 演出覆盖层
+    this.bossIntro = document.getElementById('bossIntro');
+    this.bossIntroName = document.getElementById('bossIntroName');
+    this.bossIntroTitle = document.getElementById('bossIntroTitle');
+    this.bossIntroPhase = document.getElementById('bossIntroPhase');
+    this.bossIntroHp = document.getElementById('bossIntroHp');
+    this.bossPhaseFlash = document.getElementById('bossPhaseFlash');
+    this.bossPhaseFlashText = document.getElementById('bossPhaseFlashText');
+    this.bossDeathBanner = document.getElementById('bossDeathBanner');
+    this.bossDeathName = document.getElementById('bossDeathName');
+    this._countRaf = 0;
+    this._bossDeathName = '';
+
     // 菜单导航：当前屏幕的可选项、选中下标（键盘/手柄共用同一套）
     this.menuScreen = null;
     this.menuItems = [];
@@ -279,6 +292,11 @@ class GameApp {
     this.game.onLivesChange = (lives) => this.updateLives(lives);
     this.game.onEnemyCountChange = (count) => this.updateEnemyCount(count);
     this.game.onLevelChange = (level) => this.updateLevel(level);
+    // BOSS 演出：入场名牌 / 阶段闪屏 / 击破横幅
+    this.game.onBossIntro = (data) => this.showBossIntro(data);
+    this.game.onBossIntroEnd = () => this.hideBossIntro();
+    this.game.onBossPhase = (phase) => this.flashBossPhase(phase);
+    this.game.onBossDeath = (data) => this.showBossDeath(data);
     // 每帧读统一输入信号，驱动菜单选择与武器 HUD 同步
     this.game.onFrame = (input) => {
       this.updateMenuNav(input);
@@ -297,6 +315,43 @@ class GameApp {
     } else {
       this.showPadToast('手柄已断开');
     }
+  }
+
+  // —— BOSS 演出覆盖层 ——
+  showBossIntro(data) {
+    if (!this.bossIntro || !data) return;
+    this.hideBossDeath();
+    if (this.bossIntroName) this.bossIntroName.textContent = data.name || '帮派首领';
+    if (this.bossIntroTitle) this.bossIntroTitle.textContent = data.title || 'GANG LORD // 帮派首领';
+    if (this.bossIntroPhase) this.bossIntroPhase.textContent = `PHASE ${data.phase || 1} / 3`;
+    if (this.bossIntroHp) this.bossIntroHp.textContent = `HP ${data.maxHp || data.hp || 0}`;
+    this.bossIntro.classList.add('active');
+  }
+
+  hideBossIntro() {
+    if (this.bossIntro) this.bossIntro.classList.remove('active');
+  }
+
+  flashBossPhase(phase) {
+    if (!this.bossPhaseFlash) return;
+    if (this.bossPhaseFlashText) {
+      this.bossPhaseFlashText.textContent = `PHASE ${phase}`;
+    }
+    this.bossPhaseFlash.classList.remove('show');
+    // 强制回流，保证连续阶段切换能重播动画
+    void this.bossPhaseFlash.offsetWidth;
+    this.bossPhaseFlash.classList.add('show');
+  }
+
+  showBossDeath(data) {
+    if (!this.bossDeathBanner) return;
+    this._bossDeathName = (data && data.name) || this.game.boss?.displayName || '';
+    if (this.bossDeathName) this.bossDeathName.textContent = this._bossDeathName;
+    this.bossDeathBanner.classList.add('active');
+  }
+
+  hideBossDeath() {
+    if (this.bossDeathBanner) this.bossDeathBanner.classList.remove('active');
   }
 
   // 游戏中隐藏按键图例，避免挡住战斗画面；菜单/选关时再显示
@@ -493,6 +548,9 @@ class GameApp {
       this.screens[key].classList.remove('active');
     }
     document.querySelectorAll('.selected').forEach((el) => el.classList.remove('selected'));
+    this.hideBossIntro();
+    this.hideBossDeath();
+    this._bossDeathName = '';
     this.menuScreen = null;
     this.menuItems = [];
   }
@@ -523,6 +581,8 @@ class GameApp {
   quitToMenu() {
     this.game.state = GameState.MENU;
     this.hud.container.style.display = 'none';
+    this.hideBossIntro();
+    this.hideBossDeath();
     this.updateWeaponHud();
     this.showScreen('start');
   }
@@ -549,39 +609,151 @@ class GameApp {
     this.updateWeaponHud();
   }
 
+  // 评级：命中率 / 用时 / 受击三项各 0-2 分，总分决定 S/A/B/C
+  computeRank(victory) {
+    if (!victory) return { rank: 'D', note: '任务失败' };
+
+    const fired = this.game.shotsFired || 0;
+    const acc = fired > 0 ? this.game.shotsHit / fired : 0;
+    const time = this.game.clearTime || 0;
+    const taken = this.game.damageTaken || 0;
+
+    let pts = 0;
+    if (acc >= 0.55) pts += 2;
+    else if (acc >= 0.35) pts += 1;
+    if (time > 0 && time <= 100) pts += 2;
+    else if (time > 0 && time <= 160) pts += 1;
+    if (taken <= 3) pts += 2;
+    else if (taken <= 8) pts += 1;
+
+    if (pts >= 6) return { rank: 'S', note: '完美压制' };
+    if (pts >= 4) return { rank: 'A', note: '干净利落' };
+    if (pts >= 2) return { rank: 'B', note: '勉强过关' };
+    return { rank: 'C', note: '险象环生' };
+  }
+
+  formatTime(seconds) {
+    const total = Math.max(0, Math.round(seconds || 0));
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  // 结算数字滚动：一帧内统一推进，避免多个 rAF 互相打断
+  animateResultNumbers(rows, duration = 720) {
+    cancelAnimationFrame(this._countRaf);
+    const start = performance.now();
+    const tick = (now) => {
+      const p = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      for (const row of rows) {
+        if (!row.el) continue;
+        const v = row.from + (row.to - row.from) * eased;
+        row.el.textContent = row.format(v);
+      }
+      if (p < 1) {
+        this._countRaf = requestAnimationFrame(tick);
+      } else {
+        for (const row of rows) {
+          if (row.el) row.el.textContent = row.format(row.to);
+        }
+      }
+    };
+    this._countRaf = requestAnimationFrame(tick);
+  }
+
   showGameOver(victory) {
+    this.hideBossIntro();
+    this.hideBossDeath();
     this.hud.container.style.display = 'none';
     this.screens.gameOver.classList.add('active');
 
     const titleEl = document.getElementById('resultTitle');
+    const kickerEl = document.getElementById('resultKicker');
+    const subEl = document.getElementById('resultSub');
     const levelEl = document.getElementById('resultLevel');
+    const targetEl = document.getElementById('resultTarget');
     const scoreEl = document.getElementById('resultScore');
     const killsEl = document.getElementById('resultKills');
+    const timeEl = document.getElementById('resultTime');
+    const accEl = document.getElementById('resultAccuracy');
+    const dmgEl = document.getElementById('resultDamage');
+    const rankBadge = document.getElementById('rankBadge');
+    const rankLetter = document.getElementById('rankLetter');
+    const rankNote = document.getElementById('rankNote');
+    const rewardEl = document.getElementById('resultReward');
+    const rewardValueEl = document.getElementById('resultRewardValue');
     const nextBtn = document.getElementById('nextLevelBtn');
     const retryBtn = document.getElementById('retryBtn');
     const menuBtn = document.getElementById('menuBtn');
+    const card = document.getElementById('resultCard');
+
+    const level = this.game.currentLevel;
+    const hasNext = level < LEVEL_META.length;
+    const bossName = this._bossDeathName || this.game.boss?.displayName || '';
+
+    // 评级
+    const { rank, note } = this.computeRank(victory);
+    if (rankBadge) {
+      rankBadge.dataset.rank = rank;
+      rankBadge.style.animation = 'none';
+      void rankBadge.offsetWidth;
+      rankBadge.style.animation = '';
+    }
+    if (rankLetter) rankLetter.textContent = rank;
+    if (rankNote) rankNote.textContent = note;
 
     if (victory) {
-      titleEl.textContent = '胜利!';
+      titleEl.textContent = '任务完成';
       titleEl.className = 'result-title victory';
-      const hasNext = this.game.currentLevel < LEVEL_META.length;
+      if (kickerEl) kickerEl.textContent = 'MISSION CLEAR';
+      if (subEl) subEl.textContent = bossName ? `${bossName} 已被清除` : '区域暴徒已被肃清';
       nextBtn.style.display = hasNext ? 'block' : 'none';
-
       this.gameoverButtons = hasNext ? [nextBtn, retryBtn, menuBtn] : [retryBtn, menuBtn];
-    } else {
-      titleEl.textContent = '失败...';
-      titleEl.className = 'result-title defeat';
-      nextBtn.style.display = 'none';
 
+      if (rewardEl) {
+        rewardEl.classList.remove('hidden');
+        rewardValueEl.textContent = hasNext
+          ? `LEVEL ${String(level + 1).padStart(2, '0')} · ${LEVEL_META[level].name}`
+          : '全关卡通关 · 感谢游玩';
+      }
+    } else {
+      titleEl.textContent = '任务失败';
+      titleEl.className = 'result-title defeat';
+      if (kickerEl) kickerEl.textContent = 'MISSION FAILED';
+      if (subEl) subEl.textContent = '你倒在了暴徒的枪口下';
+      nextBtn.style.display = 'none';
       this.gameoverButtons = [retryBtn, menuBtn];
+      if (rewardEl) rewardEl.classList.add('hidden');
     }
 
     this.menuIndex = 0;
     this.refreshMenuItems();
 
-    levelEl.textContent = this.game.currentLevel;
-    scoreEl.textContent = this.game.score;
-    killsEl.textContent = this.game.totalKills;
+    // 卡片入场动画重播
+    if (card) {
+      card.style.animation = 'none';
+      void card.offsetWidth;
+      card.style.animation = '';
+    }
+
+    if (levelEl) levelEl.textContent = String(level).padStart(2, '0');
+    if (targetEl) {
+      targetEl.textContent = bossName || LEVEL_META[level - 1]?.name || '未知目标';
+    }
+
+    const fired = this.game.shotsFired || 0;
+    const acc = fired > 0 ? Math.round((this.game.shotsHit / fired) * 100) : 0;
+    const time = victory ? (this.game.clearTime || 0) : 0;
+
+    // 数字滚动：时间按秒进，命中率/消灭/受击/分数取整
+    this.animateResultNumbers([
+      { el: timeEl, from: 0, to: time, format: (v) => this.formatTime(v) },
+      { el: accEl, from: 0, to: acc, format: (v) => `${Math.round(v)}%` },
+      { el: killsEl, from: 0, to: this.game.totalKills || 0, format: (v) => String(Math.round(v)) },
+      { el: dmgEl, from: 0, to: this.game.damageTaken || 0, format: (v) => String(Math.round(v)) },
+      { el: scoreEl, from: 0, to: this.game.score || 0, format: (v) => String(Math.round(v)) },
+    ]);
   }
 
   updateScore(score) {

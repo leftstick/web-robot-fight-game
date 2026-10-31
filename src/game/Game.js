@@ -5,6 +5,7 @@ import { ParticleSystem } from './Particle.js';
 import { EffectSystem } from './Effects.js';
 import { SceneRenderer } from './SceneRenderer.js';
 import { Level, loadLevels } from './Level.js';
+import { Cover } from './Cover.js';
 import { Pickup } from './Pickup.js';
 import { BulletOwner } from './Bullet.js';
 import { InputManager } from '../utils/input.js';
@@ -64,6 +65,19 @@ export class Game {
     this.pickupToast = null;
     this.boss = null;
     this.bossSpawned = false;
+    this.bossArena = null;
+    this.bossIntroUntil = 0;
+    this.bossDeath = null;
+    this.cinematic = null;          // null | bossIntro | bossDeath
+    this.shockwaves = [];
+    this.arenaPlatformsAdded = false;
+
+    // 结算统计
+    this.levelStartedAt = 0;
+    this.clearTime = 0;
+    this.shotsFired = 0;
+    this.shotsHit = 0;
+    this.damageTaken = 0;
 
     this.cameraX = 0;
     this.particleSystem = new ParticleSystem();
@@ -82,6 +96,7 @@ export class Game {
     this.screenShakeIntensity = 0;
     this.hitStop = 0;
     this.damageFlash = 0;
+    this.whiteFlash = 0;
 
     // 加载进度
     this.loadProgress = 0;
@@ -96,6 +111,10 @@ export class Game {
     this.onLivesChange = null;
     this.onEnemyCountChange = null;
     this.onLevelChange = null;
+    this.onBossIntro = null;
+    this.onBossIntroEnd = null;
+    this.onBossPhase = null;
+    this.onBossDeath = null;
 
     this._lastRemaining = -1;
   }
@@ -157,11 +176,23 @@ export class Game {
     this.enemies = [];
     this.boss = null;
     this.bossSpawned = false;
+    this.bossArena = null;
+    this.bossIntroUntil = 0;
+    this.bossDeath = null;
+    this.cinematic = null;
+    this.shockwaves = [];
+    this.arenaPlatformsAdded = false;
+    this.levelStartedAt = performance.now();
+    this.clearTime = 0;
+    this.shotsFired = 0;
+    this.shotsHit = 0;
+    this.damageTaken = 0;
     this.particleSystem.clear();
     this.effectSystem.clear();
     this.screenShake = 0;
     this.hitStop = 0;
     this.damageFlash = 0;
+    this.whiteFlash = 0;
     this.cameraX = clamp(this.level.playerSpawn.x - this.logicalW * 0.4, 0, this.level.worldWidth - this.logicalW);
 
     this.player = new Player(this.level.playerSpawn.x);
@@ -235,15 +266,21 @@ export class Game {
       this.updatePlaying(dtf, input);
     }
 
+    // Boss 演出与阶段计时不受命中停顿影响，保证死亡/入场流程完整播完
+    if (this.state === GameState.PLAYING) this.updateCinematic();
+
+    if (this.whiteFlash > 0) {
+      this.whiteFlash = Math.max(0, this.whiteFlash - this.deltaTime / 240);
+    }
+    if (this.damageFlash > 0) {
+      this.damageFlash = Math.max(0, this.damageFlash - this.deltaTime / 420);
+    }
+
     const fxDelta = frozen ? this.deltaTime * 0.25 : this.deltaTime;
     this.particleSystem.update(fxDelta);
     this.effectSystem.update(fxDelta);
 
     for (const c of (this.level ? this.level.covers : [])) c.update(this.deltaTime);
-
-    if (this.damageFlash > 0) {
-      this.damageFlash = Math.max(0, this.damageFlash - this.deltaTime / 420);
-    }
 
     if (this.screenShake > 0) {
       this.screenShake -= this.deltaTime;
@@ -256,6 +293,9 @@ export class Game {
       this.pause();
       return;
     }
+
+    // Boss 入场 / 死亡演出期间锁住战斗输入，但世界继续更新
+    if (this.cinematic) input = this.neutralInput(input);
 
     const p = this.player;
 
@@ -273,6 +313,7 @@ export class Game {
         const w = fire.weapon;
         const b = p.createBullet(w);
         this.bullets.push(b);
+        this.shotsFired++;
         // 枪口特效对准精灵里的实际枪管位置
         const muzzle = p.getMuzzle();
         this.effectSystem.muzzleFlash(muzzle.x, muzzle.y, p.facing, w.muzzleScale || 0.5, w.muzzleTint || null);
@@ -305,9 +346,15 @@ export class Game {
 
     p.update(dtf, this.world, this.currentTime);
 
+    // Boss 竞技场封锁：玩家不能越过两侧能量闸门
+    if (this.bossArena) {
+      p.x = clamp(p.x, this.bossArena.x1 + 2, this.bossArena.x2 - p.width - 2);
+    }
+
     this.updateCamera();
     this.updateBullets(dtf);
     this.updateEnemies(dtf);
+    this.updateShockwaves(dtf);
     this.updatePickups(dtf);
     this.updateGrenades(dtf);
     this.spawnBoss();
@@ -316,6 +363,21 @@ export class Game {
     this.resolveMelee();
 
     this.checkGameState();
+  }
+
+  neutralInput(input) {
+    return {
+      ...input,
+      moveLeft: false,
+      moveRight: false,
+      aim: false,
+      crouch: false,
+      jump: false,
+      shoot: false,
+      grenade: false,
+      switchWeapon: false,
+      melee: false,
+    };
   }
 
   // 自动切刀：检测玩家附近是否有敌人
@@ -368,6 +430,13 @@ export class Game {
   }
 
   updateCamera() {
+    // Boss 竞技场：镜头锁死在闸门范围内，不再跟随玩家
+    if (this.bossArena) {
+      const target = this.bossArena.x1;
+      this.cameraX += (target - this.cameraX) * 0.16;
+      this.cameraX = clamp(this.cameraX, 0, this.level.worldWidth - this.logicalW);
+      return;
+    }
     const target = this.player.x + this.player.width / 2 - this.logicalW * 0.4;
     const clamped = clamp(target, 0, this.level.worldWidth - this.logicalW);
     this.cameraX += (clamped - this.cameraX) * 0.16;
@@ -422,11 +491,25 @@ export class Game {
           b.active = false;
           const hx = b.x + b.width / 2;
           const hy = b.y + b.height / 2;
+          this.shotsHit++;
+          const prevPhase = e === this.boss ? e.phase : 0;
+          const multiplier = e.damageMultiplierAt ? e.damageMultiplierAt(hx, hy) : 1;
           this.bulletImpactFx(b, hx, hy);
-          this.effectSystem.blood(hx, hy);
-          const died = e.takeDamage(b.damage);
+          if (multiplier > 1) {
+            // 弱点命中：金色爆点 + 额外顿帧，让玩家知道打对了地方
+            this.effectSystem.explosion(hx, hy);
+            this.particleSystem.createExplosion(hx, hy, '#ffe066', 14);
+            this.addHitStop(45);
+            this.addScreenShake(7, 5);
+          } else {
+            this.effectSystem.blood(hx, hy);
+          }
+          const died = e.takeDamage(b.damage * multiplier, this.currentTime);
           this.addScreenShake(b.impactShake, b.impactShakeIntensity);
           this.addHitStop(died ? 85 : b.hitStop);
+          if (!died && e === this.boss && e.phase !== prevPhase) {
+            this.handleBossPhase(e.phase);
+          }
           if (died) this.killEnemy(e);
           if (b.splashRadius > 0) this.applySplash(b, hx, hy, e);
           return;
@@ -474,27 +557,51 @@ export class Game {
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
       if (e.dead) {
+        if (e === this.boss) {
+          // Boss 死亡演出期间保留尸体，按慢动作推进死亡帧
+          if (this.bossDeath) {
+            e.deathTime += this.deltaTime * 0.42;
+            continue;
+          }
+          continue;
+        }
         e.deathTime += this.deltaTime;
         if (e.deathTime > 600) {
           this.enemies.splice(i, 1);
         }
         continue;
       }
+
+      // 死亡演出期间冻结其他敌人，避免抢戏或补刀
+      if (this.bossDeath) continue;
+
       if (!e.awake) {
         if (e.x < this.cameraX + this.logicalW + 70) e.awake = true;
         else continue;
       }
       if (e.cover && e.cover.hp <= 0) e.cover = null;
 
-      const bullet = e.update(dtf, this.deltaTime, this.currentTime, this.world, this.player);
-      if (bullet) {
-        this.bullets.push(bullet);
+      const result = e.update(dtf, this.deltaTime, this.currentTime, this.world, this.player);
+      if (Array.isArray(result)) {
+        for (const b of result) this.bullets.push(b);
+        const c = e.corePoint || e.getMuzzle();
+        this.effectSystem.muzzleFlash(c.x, c.y, e.facing, 0.85, '#ff2e88');
+        this.sfx.enemyShoot();
+      } else if (result) {
+        this.bullets.push(result);
         // 敌人枪口火焰（与精灵枪管对齐）
         const muzzle = e.getMuzzle();
         this.effectSystem.muzzleFlash(muzzle.x, muzzle.y, e.facing);
         this.sfx.enemyShoot();
       }
       if (e.hitFlash > 0) e.hitFlash -= this.deltaTime;
+
+      // Boss 震地 / 二阶段召唤
+      if (e === this.boss) {
+        if (e.consumeShockwave && e.consumeShockwave()) this.triggerBossShockwave(e);
+        const summonCount = e.consumeSummon ? e.consumeSummon() : 0;
+        if (summonCount > 0) this.summonBossAdds(summonCount);
+      }
 
       // Boss 冲撞接触伤害
       if (e.tryChargeHit && e.tryChargeHit(this.player, this.currentTime)) {
@@ -504,6 +611,61 @@ export class Game {
         }
       }
     }
+  }
+
+  triggerBossShockwave(boss) {
+    const cx = boss.getCenterX();
+    for (const dir of [-1, 1]) {
+      this.shockwaves.push({
+        x: cx, dir, speed: 2.3, age: 0, life: 1700, hit: false,
+      });
+    }
+    this.effectSystem.explosion(cx, GameConfig.GROUND_Y - 8);
+    this.particleSystem.createExplosion(cx, GameConfig.GROUND_Y - 8, '#ff8a3d', 18);
+    this.addScreenShake(18, 9);
+    this.addHitStop(60);
+    this.sfx.slam();
+  }
+
+  updateShockwaves(dtf) {
+    const p = this.player;
+    for (let i = this.shockwaves.length - 1; i >= 0; i--) {
+      const w = this.shockwaves[i];
+      w.age += this.deltaTime;
+      w.x += w.dir * w.speed * dtf;
+
+      if (!w.hit) {
+        const rect = { x: w.x - 5, y: GameConfig.GROUND_Y - 18, width: 10, height: 18 };
+        if (aabb(rect, p.getBounds())) {
+          w.hit = true;
+          if (!p.isInvincibleNow(this.currentTime)) {
+            this.damagePlayer();
+            this.addHitStop(45);
+          }
+        }
+      }
+
+      if (w.age > w.life || w.x < this.bossArena?.x1 - 10 || w.x > this.bossArena?.x2 + 10) {
+        this.shockwaves.splice(i, 1);
+      }
+    }
+  }
+
+  summonBossAdds(count) {
+    if (!this.bossArena) return;
+    const arena = this.bossArena;
+    const spots = [arena.x1 + 48, arena.x2 - 48, arena.x1 + 120, arena.x2 - 120];
+    for (let i = 0; i < count; i++) {
+      if (this.enemies.length > 8) break;
+      const x = spots[i % spots.length];
+      const thug = new Thug(x, GameConfig.GROUND_Y);
+      thug.awake = true;
+      this.enemies.push(thug);
+      this.effectSystem.explosion(x, GameConfig.GROUND_Y - 18);
+      this.particleSystem.createExplosion(x, GameConfig.GROUND_Y - 18, '#ff2e88', 10);
+    }
+    this.showPickupToast('增援抵达', '#ff8a93');
+    this.sfx.enemyShoot();
   }
 
   updateGrenades(dtf) {
@@ -560,6 +722,15 @@ export class Game {
 
   killEnemy(e) {
     e.dead = true;
+    this.addScore(e.score);
+    this.totalKills++;
+    this.emitRemaining(false);
+
+    if (e === this.boss) {
+      this.beginBossDeath(e);
+      return;
+    }
+
     const c = { x: e.x + e.width / 2, y: e.y + e.height / 2 };
     this.effectSystem.blood(c.x, c.y);
     this.effectSystem.spawn('debris', c.x, c.y + 6, { scale: 0.4, frameDuration: 60, additive: false });
@@ -567,16 +738,94 @@ export class Game {
     this.addScreenShake(11, 6);
     this.addHitStop(85);
     this.sfx.explosion();
-
-    this.addScore(e.score);
-    this.totalKills++;
-    this.emitRemaining(false);
     this.spawnLoot(e);
+  }
 
-    if (e === this.boss) {
+  beginBossDeath(boss) {
+    boss.deathTime = 0;
+    this.bossDeath = {
+      elapsed: 0,
+      duration: 3200,
+      nextExplosion: 0,
+      count: 0,
+      bigBoom: false,
+    };
+    this.cinematic = 'bossDeath';
+    this.shockwaves = [];
+    this.bullets = this.bullets.filter((b) => b.owner !== BulletOwner.ENEMY);
+    this.addScreenShake(26, 13);
+    this.addHitStop(180);
+    this.whiteFlash = 0.75;
+    this.sfx.explosion();
+    if (this.onBossDeath) this.onBossDeath({ name: boss.displayName, title: boss.title });
+  }
+
+  updateCinematic() {
+    if (this.cinematic === 'bossIntro') {
+      if (this.currentTime >= this.bossIntroUntil) {
+        this.cinematic = null;
+        if (this.boss) this.boss.controlLocked = false;
+        if (this.onBossIntroEnd) this.onBossIntroEnd();
+      }
+    }
+    if (this.bossDeath) this.updateBossDeath();
+  }
+
+  updateBossDeath() {
+    const bd = this.bossDeath;
+    const boss = this.boss;
+    if (!bd || !boss) return;
+    bd.elapsed += this.deltaTime;
+
+    if (bd.elapsed >= bd.nextExplosion && bd.count < 8) {
+      bd.count++;
+      bd.nextExplosion = bd.elapsed + 320;
+      const x = boss.x + Math.random() * boss.width;
+      const y = boss.y + 12 + Math.random() * (boss.height - 24);
+      this.effectSystem.explosion(x, y);
+      this.effectSystem.spawn('debris', x, y, { scale: 0.5, frameDuration: 60, additive: false });
+      this.particleSystem.createExplosion(x, y, '#ffb347', 10);
+      this.addScreenShake(9, 5);
+      this.sfx.explosion();
+    }
+
+    if (!bd.bigBoom && bd.elapsed >= 1500) {
+      bd.bigBoom = true;
+      const c = boss.corePoint;
+      this.effectSystem.explosion(c.x, c.y);
+      this.particleSystem.createExplosion(c.x, c.y, '#ffffff', 36);
+      this.particleSystem.createExplosion(c.x, c.y, '#ff8a3d', 24);
+      this.whiteFlash = 1;
+      this.addScreenShake(30, 15);
+      this.addHitStop(90);
+      this.sfx.explosion();
+      this.sfx.explosion();
+    }
+
+    if (bd.elapsed >= bd.duration) {
+      this.bossDeath = null;
+      this.cinematic = null;
+      this.clearTime = Math.max(1, (performance.now() - this.levelStartedAt) / 1000);
       this.state = GameState.VICTORY;
       if (this.onStateChange) this.onStateChange(this.state);
     }
+  }
+
+  handleBossPhase(phase) {
+    const boss = this.boss;
+    if (!boss) return;
+    const c = boss.corePoint;
+    this.effectSystem.explosion(c.x, c.y);
+    this.particleSystem.createExplosion(c.x, c.y, '#ffe066', 24);
+    this.addScreenShake(22, 12);
+    this.addHitStop(150);
+    this.whiteFlash = Math.max(this.whiteFlash, 0.45);
+    this.sfx.bossPhase();
+    this.showPickupToast(
+      phase === 2 ? 'BOSS 暴走 · 注意震地' : '核心暴露 · 攻击胸口弱点',
+      phase === 2 ? '#ff8a3d' : '#ffe066',
+    );
+    if (this.onBossPhase) this.onBossPhase(phase, boss);
   }
 
   addScore(points) {
@@ -706,6 +955,7 @@ export class Game {
 
   damagePlayer() {
     this.lives--;
+    this.damageTaken++;
     this.addScreenShake(20, 10);
     this.addHitStop(65);
     this.damageFlash = 1;
@@ -716,11 +966,71 @@ export class Game {
 
   spawnBoss() {
     if (!this.level.boss || this.bossSpawned) return;
-    if (this.player.x > this.level.boss.x - 380) {
-      this.bossSpawned = true;
-      this.boss = new Boss(this.level.boss.x, GameConfig.GROUND_Y, this.level.boss.hp);
-      this.boss.awake = true;
-      this.enemies.push(this.boss);
+
+    // 竞技场以 Boss 为基准向左取一屏，触发点放在左闸门内侧，
+    // 这样玩家进入时已经在画面里，不会贴边。
+    const worldW = this.level.worldWidth;
+    const x1 = clamp(this.level.boss.x - 420, 0, worldW - this.logicalW);
+    const triggerX = x1 + 60;
+    if (this.player.x < triggerX) return;
+
+    this.bossSpawned = true;
+    const x2 = Math.min(worldW, x1 + this.logicalW);
+    this.bossArena = { x1, x2, locked: true };
+    this.world.arena = this.bossArena;
+    // 入场瞬间把镜头钉在左闸门，保证 Boss 名牌和本体同框
+    this.cameraX = x1;
+
+    // 竞技场高台：一层换位、二层躲震波
+    if (!this.arenaPlatformsAdded) {
+      this.arenaPlatformsAdded = true;
+      this.level.platforms.push(
+        { x: Math.round(x1 + 64), y: 188, w: 92, h: 9 },
+        { x: Math.round(x1 + 302), y: 158, w: 96, h: 9 },
+      );
+    }
+
+    // 清掉场地内原有掩体，换成两个可破坏掩体，保证 Boss 不被堵住
+    this.level.covers = this.level.covers.filter(
+      (c) => c.x + c.w < x1 || c.x > x2,
+    );
+    this.level.covers.push(
+      new Cover(x1 + 96, GameConfig.GROUND_Y - 26, 30, 26, 8, true, 'crate'),
+      new Cover(x1 + 288, GameConfig.GROUND_Y - 20, 46, 20, 12, true, 'sandbags'),
+    );
+    this.world.covers = this.level.covers;
+
+    // 普通杂兵不参与 Boss 战，二阶段由 Boss 召唤增援
+    this.enemies = this.enemies.filter(
+      (e) => e.x + e.width < x1 || e.x > x2,
+    );
+
+    this.boss = new Boss(
+      this.level.boss.x,
+      GameConfig.GROUND_Y,
+      this.level.boss.hp,
+      { name: this.level.boss.name, title: this.level.boss.title },
+    );
+    this.boss.awake = true;
+    this.boss.controlLocked = true;
+    this.enemies.push(this.boss);
+
+    // 场地补给：血量与弹药，避免长血条战斗打到弹尽
+    this.spawnPickup('health', x1 + 140, GameConfig.GROUND_Y);
+    this.spawnPickup('ammo', x1 + 330, GameConfig.GROUND_Y);
+
+    // 入场演出：锁输入 1.8 秒，镜头拉进竞技场
+    this.cinematic = 'bossIntro';
+    this.bossIntroUntil = this.currentTime + 1800;
+    this.sfx.bossRoar();
+    if (this.onBossIntro) {
+      this.onBossIntro({
+        name: this.boss.displayName,
+        title: this.boss.title,
+        hp: this.boss.hp,
+        maxHp: this.boss.maxHp,
+        phase: 1,
+      });
     }
   }
 
@@ -734,6 +1044,7 @@ export class Game {
   }
 
   checkGameState() {
+    if (this.bossDeath) return;
     if (this.lives <= 0) {
       this.state = GameState.GAME_OVER;
       if (this.onStateChange) this.onStateChange(this.state);
@@ -741,6 +1052,7 @@ export class Game {
     }
     if (!this.level.boss && this.enemies.length === 0 &&
         this.player.x >= this.level.worldWidth - this.logicalW * 0.5) {
+      this.clearTime = Math.max(1, (performance.now() - this.levelStartedAt) / 1000);
       this.state = GameState.VICTORY;
       if (this.onStateChange) this.onStateChange(this.state);
     }
@@ -802,6 +1114,10 @@ export class Game {
         if (this.isVisible(c.x, c.w)) c.draw(ctx);
       }
 
+      // Boss 竞技场能量闸门 + 震地冲击波
+      this.drawArenaGates(ctx);
+      this.drawShockwaves(ctx);
+
       // 掉落物：在角色之后、敌人之前，避免遮住战斗主体
       for (const pk of this.pickups) {
         if (this.isVisible(pk.x, pk.w)) pk.draw(ctx, this.currentTime);
@@ -846,7 +1162,66 @@ export class Game {
     this.compositeToScreen();
   }
 
+  drawArenaGates(ctx) {
+    if (!this.bossArena) return;
+    const { x1, x2 } = this.bossArena;
+    const top = GameConfig.GROUND_Y - 110;
+    const t = this.currentTime;
+    for (const x of [x1, x2]) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const grd = ctx.createLinearGradient(0, top, 0, GameConfig.GROUND_Y);
+      grd.addColorStop(0, 'rgba(0, 229, 255, 0)');
+      grd.addColorStop(0.45, 'rgba(0, 229, 255, 0.12)');
+      grd.addColorStop(1, 'rgba(0, 229, 255, 0.42)');
+      ctx.fillStyle = grd;
+      ctx.fillRect(x - 3, top, 6, GameConfig.GROUND_Y - top);
+
+      // 向上扫的光点
+      const scanY = GameConfig.GROUND_Y - ((t * 0.055) % 110);
+      ctx.fillStyle = 'rgba(170, 250, 255, 0.65)';
+      ctx.fillRect(x - 3, scanY, 6, 2);
+
+      // 顶部危险箭头
+      ctx.fillStyle = 'rgba(255, 46, 136, 0.9)';
+      for (let i = 0; i < 3; i++) {
+        const ay = top + 10 + i * 10;
+        ctx.beginPath();
+        ctx.moveTo(x, ay);
+        ctx.lineTo(x + 5, ay + 6);
+        ctx.lineTo(x - 5, ay + 6);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  drawShockwaves(ctx) {
+    for (const w of this.shockwaves) {
+      const fade = Math.max(0, 1 - w.age / w.life);
+      const h = 8 + fade * 8;
+      const x = Math.round(w.x);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const grd = ctx.createLinearGradient(0, GameConfig.GROUND_Y - h, 0, GameConfig.GROUND_Y);
+      grd.addColorStop(0, 'rgba(255, 138, 61, 0)');
+      grd.addColorStop(0.45, `rgba(255, 138, 61, ${0.7 * fade})`);
+      grd.addColorStop(1, `rgba(255, 230, 160, ${0.95 * fade})`);
+      ctx.fillStyle = grd;
+      ctx.fillRect(x - 4, GameConfig.GROUND_Y - h, 8, h);
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.8 * fade})`;
+      ctx.fillRect(x - 1, GameConfig.GROUND_Y - h * 0.55, 2, h * 0.55);
+      ctx.restore();
+    }
+  }
+
   drawPostFx(ctx) {
+    if (this.whiteFlash > 0) {
+      ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(0.92, this.whiteFlash)})`;
+      ctx.fillRect(0, 0, this.logicalW, this.logicalH);
+    }
+
     if (this.damageFlash > 0) {
       ctx.fillStyle = `rgba(255, 24, 64, ${0.20 * this.damageFlash})`;
       ctx.fillRect(0, 0, this.logicalW, this.logicalH);
@@ -1069,22 +1444,26 @@ export class Game {
     ctx.fillStyle = '#ffb0d2';
     ctx.fillRect(Math.max(0, this.logicalW * prog - 2), 1, 2, 1);
 
-    // BOSS 血条：切角金属框 + 分段刻度，取代原来头顶小血条
+    // BOSS 血条：三阶段分段 + 当前阶段标识
     if (this.boss && !this.boss.dead && this.boss.awake) {
       const bw = 190;
       const bh = 7;
       const bx = Math.round((this.logicalW - bw) / 2);
       const by = 19;
       const ratio = clamp(this.boss.hp / this.boss.maxHp, 0, 1);
+      const phase = this.boss.phase || 1;
+      const barColor = phase >= 3 ? '#ffe066' : (phase === 2 ? '#ff8a3d' : '#ff2e88');
+      const title = this.boss.title || 'GANG LORD // 帮派首领';
 
       ctx.save();
-      // 标题
-      ctx.fillStyle = 'rgba(4, 4, 10, 0.78)';
-      ctx.fillRect(this.logicalW / 2 - 52, by - 11, 104, 9);
-      ctx.fillStyle = 'rgba(255, 186, 216, 0.98)';
+      // 标题底板按文字宽度自适应
       ctx.font = 'bold 7px monospace';
+      const titleW = Math.max(120, Math.ceil(ctx.measureText(title).width) + 12);
+      ctx.fillStyle = 'rgba(4, 4, 10, 0.78)';
+      ctx.fillRect(this.logicalW / 2 - titleW / 2, by - 11, titleW, 9);
+      ctx.fillStyle = 'rgba(255, 186, 216, 0.98)';
       ctx.textAlign = 'center';
-      ctx.fillText('GANG LORD // 帮派首领', this.logicalW / 2, by - 4);
+      ctx.fillText(title, this.logicalW / 2, by - 4);
       ctx.textAlign = 'left';
 
       // 切角底板
@@ -1102,21 +1481,30 @@ export class Game {
       ctx.fillRect(bx, by, bw, 1);
 
       // 血量
-      ctx.fillStyle = '#ff2e88';
+      ctx.fillStyle = barColor;
       ctx.fillRect(bx, by + 1, Math.round(bw * ratio), bh - 2);
-      ctx.fillStyle = '#ff7d5c';
+      ctx.fillStyle = 'rgba(255,255,255,0.32)';
       ctx.fillRect(bx, by + 2, Math.round(bw * ratio), 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
       ctx.fillRect(bx, by + 1, Math.round(bw * ratio), 1);
 
-      // 分段刻度
-      ctx.fillStyle = 'rgba(8, 6, 12, 0.7)';
-      for (let i = 1; i < 4; i++) {
-        ctx.fillRect(bx + Math.round(bw * i / 4), by, 1, bh);
+      // 阶段分界刻度：66% / 33%
+      ctx.fillStyle = 'rgba(8, 6, 12, 0.85)';
+      for (const th of GameConfig.BOSS.phaseThresholds) {
+        ctx.fillRect(bx + Math.round(bw * th), by, 1, bh);
       }
       if (ratio > 0) {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(bx + Math.round(bw * ratio) - 1, by, 1, bh);
+      }
+
+      // 当前阶段
+      ctx.font = 'bold 6px monospace';
+      ctx.fillStyle = barColor;
+      ctx.fillText(`PHASE ${phase}/3`, bx + bw + 7, by + 6);
+      if (phase >= 3) {
+        ctx.fillStyle = '#ffe066';
+        ctx.fillRect(bx + bw + 2, by - 1, 2, 2);
       }
       ctx.restore();
     }

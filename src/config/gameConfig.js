@@ -58,11 +58,19 @@ export const GameConfig = {
     height: 80,
     crouchHeight: 50,
     speed: 0.45,
-    hp: 42,
-    score: 2000,
+    hp: 120,
+    score: 5000,
     fireInterval: 850,
     bulletSpeed: 3.75,
     bulletDamage: 2,
+    // 三阶段：66% 进入暴走，33% 核心暴露
+    phaseThresholds: [0.66, 0.33],
+    phaseInvuln: 1000,       // 阶段切换无敌时长(ms)
+    coreRadius: 12,          // 三阶段弱点判定半径
+    coreMultiplier: 2,       // 打核心的伤害倍率
+    slamCooldown: 3200,      // 震地冷却(ms)
+    radialCooldown: 2600,    // 环形弹幕冷却(ms)
+    nearRange: 150,          // 触发震地的距离
   },
 
   GRENADE: {
@@ -107,7 +115,7 @@ export const GameConfig = {
     {
       id: 'pistol', name: '手枪', color: '#ffe066',
       trait: '精准 · 无限',
-      fireInterval: 220, bulletSpeed: 7.4, bulletDamage: 1,
+      fireInterval: 240, bulletSpeed: 7.4, bulletDamage: 1,
       bulletWidth: 12, bulletHeight: 3,
       spreadDeg: 0,
       bulletStyle: 'pistol', sfx: 'pistol', muzzleScale: 0.5,

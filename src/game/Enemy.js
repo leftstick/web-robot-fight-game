@@ -350,12 +350,23 @@ export class Thug extends EnemyBase {
 }
 
 export class Boss extends EnemyBase {
-  constructor(feetX, feetY, hp) {
+  constructor(feetX, feetY, hp, opts = {}) {
     super(GameConfig.BOSS, 'boss', feetX, feetY);
     if (hp) {
       this.hp = hp;
       this.maxHp = hp;
     }
+    this.displayName = opts.name || '帮派首领';
+    this.title = opts.title || 'GANG LORD // 帮派首领';
+
+    // 三阶段状态
+    this.phase = 1;
+    this.phaseTransitionUntil = 0;
+    this.phaseFlashUntil = 0;
+    this.coreOpen = false;
+    this.controlLocked = false;
+    this.lastUpdateTime = 0;
+
     this.burstLeft = 0;
     this.nextBurstAt = 0;
     // 冲撞攻击状态
@@ -364,23 +375,152 @@ export class Boss extends EnemyBase {
     this.chargeDir = 1;
     this.chargeDamageDealt = false;
     this.nextActionAt = 0;
+
+    // 震地攻击状态
+    this.slamState = 'idle';     // idle | windup | recover
+    this.slamEnd = 0;
+    this.nextSlamAt = 0;
+    this.pendingShockwave = false;
+
+    // 三阶段环形弹幕 / 召唤
+    this.nextRadialAt = 0;
+    this.pendingSummon = 0;
+  }
+
+  get corePoint() {
+    return {
+      x: this.getCenterX(),
+      y: this.y + this.height * 0.52,
+    };
+  }
+
+  // 核心暴露时，命中核心的子弹吃双倍伤害
+  damageMultiplierAt(x, y) {
+    if (!this.coreOpen || this.dead) return 1;
+    const c = this.corePoint;
+    return Math.hypot(x - c.x, y - c.y) <= GameConfig.BOSS.coreRadius
+      ? GameConfig.BOSS.coreMultiplier
+      : 1;
+  }
+
+  takeDamage(damage, t = 0) {
+    if (this.dead) return false;
+    if (t && t < this.phaseTransitionUntil) return false;
+
+    // 血量跨过阶段阈值时，先锁血并进入阶段转换，不让 Boss 被一发跳阶段秒掉
+    if (this.phase < 3) {
+      const cfg = GameConfig.BOSS;
+      const nextThreshold = this.phase === 1 ? cfg.phaseThresholds[0] : cfg.phaseThresholds[1];
+      const floor = Math.max(1, Math.floor(this.maxHp * nextThreshold));
+      if (this.hp - damage <= floor) {
+        this.hp = floor;
+        this.hitFlash = 130;
+        this.advancePhase(t);
+        return false;
+      }
+    }
+
+    return super.takeDamage(damage);
+  }
+
+  advancePhase(t) {
+    const cfg = GameConfig.BOSS;
+    if (this.phase === 1) {
+      this.phase = 2;
+      this.phaseTransitionUntil = t + cfg.phaseInvuln;
+      this.phaseFlashUntil = this.phaseTransitionUntil;
+      this.pendingSummon = 2;
+      this.nextSlamAt = t + 900;
+    } else if (this.phase === 2) {
+      this.phase = 3;
+      this.phaseTransitionUntil = t + cfg.phaseInvuln;
+      this.phaseFlashUntil = this.phaseTransitionUntil;
+      this.coreOpen = true;
+      this.nextRadialAt = t + 900;
+      this.nextSlamAt = t + 500;
+    } else {
+      return;
+    }
+    this.vx = 0;
+    this.burstLeft = 0;
+    this.chargeState = 'idle';
+    this.slamState = 'idle';
+  }
+
+  consumeShockwave() {
+    if (!this.pendingShockwave) return false;
+    this.pendingShockwave = false;
+    return true;
+  }
+
+  consumeSummon() {
+    const n = this.pendingSummon;
+    this.pendingSummon = 0;
+    return n;
+  }
+
+  phys(dtf, world) {
+    super.phys(dtf, world);
+    const arena = world.arena;
+    if (!arena) return;
+    const minX = arena.x1 + 14;
+    const maxX = arena.x2 - this.width - 14;
+    if (this.x < minX) {
+      this.x = minX;
+      this.vx = Math.max(0, this.vx);
+    } else if (this.x > maxX) {
+      this.x = maxX;
+      this.vx = Math.min(0, this.vx);
+    }
   }
 
   update(dtf, deltaTime, t, world, player) {
     if (this.dead) return null;
+    this.lastUpdateTime = t;
     this.updateFacing(player);
+
+    // 入场演出 / 阶段转换期间：站桩不攻击
+    if (this.phaseTransitionUntil > t || this.controlLocked) {
+      this.vx = 0;
+      this.animTime += dtf * (this.controlLocked ? 0.35 : 1);
+      this.phys(dtf, world);
+      return null;
+    }
 
     const cfg = GameConfig.BOSS;
     const pcx = player.x + player.width / 2;
     const mycx = this.getCenterX();
     const dist = Math.abs(pcx - mycx);
 
+    // —— 震地：蓄力结束的同一帧交给 Game 生成左右冲击波 ——
+    if (this.slamState === 'windup') {
+      this.vx = 0;
+      this.animTime += dtf;
+      this.phys(dtf, world);
+      if (t >= this.slamEnd) {
+        this.slamState = 'recover';
+        this.slamEnd = t + 450;
+        this.nextSlamAt = t + cfg.slamCooldown;
+        this.pendingShockwave = true;
+      }
+      return null;
+    }
+
+    if (this.slamState === 'recover') {
+      this.vx *= 0.82;
+      if (Math.abs(this.vx) < 0.1) this.vx = 0;
+      if (t >= this.slamEnd) this.slamState = 'idle';
+      this.animTime += dtf;
+      this.phys(dtf, world);
+      return null;
+    }
+
     // —— 冲撞状态机 ——
     if (this.chargeState === 'windup') {
       this.vx = 0;
       if (t >= this.chargeEnd) {
         this.chargeState = 'charging';
-        this.chargeEnd = t + 650;          // 冲撞持续 650ms
+        this.chargeEnd = t + (this.phase >= 3 ? 720 : 650);
         this.chargeDir = this.facing;
         this.chargeDamageDealt = false;
       }
@@ -390,16 +530,15 @@ export class Boss extends EnemyBase {
     }
 
     if (this.chargeState === 'charging') {
-      // 高速冲向玩家方向
-      this.vx = this.chargeDir * cfg.speed * 6.5;
+      const rush = this.phase >= 2 ? 7.0 : 6.5;
+      this.vx = this.chargeDir * cfg.speed * rush;
       if (t >= this.chargeEnd) {
         this.chargeState = 'recover';
         this.chargeEnd = t + 500;
-        this.nextActionAt = t + 1500;
+        this.nextActionAt = t + (this.phase >= 3 ? 1100 : 1500);
       }
       this.animTime += dtf;
       this.phys(dtf, world);
-      // 冲撞中不射击
       return null;
     }
 
@@ -414,13 +553,20 @@ export class Boss extends EnemyBase {
       return null;
     }
 
-    // —— idle：保持距离 + 点射 + 伺机冲撞 ——
-    // 修正：boss 应停在玩家一侧的 engage 距离外（与玩家同侧方向）
+    // —— 三阶段：核心暴露后周期性环形弹幕 ——
+    if (this.phase >= 3 && t >= this.nextRadialAt) {
+      this.nextRadialAt = t + cfg.radialCooldown;
+      this.nextActionAt = Math.max(this.nextActionAt, t + 550);
+      return this.radialBurst(t);
+    }
+
+    // —— idle：保持距离 + 点射 + 伺机震地/冲撞 ——
     const targetX = pcx - this.facing * 220;
     const dxTarget = targetX - this.x;
+    const moveSpeed = cfg.speed * (this.phase >= 2 ? 1.3 : 1);
 
     if (Math.abs(dxTarget) > 14) {
-      this.vx = Math.sign(dxTarget) * cfg.speed;
+      this.vx = Math.sign(dxTarget) * moveSpeed;
     } else {
       this.vx = 0;
     }
@@ -428,31 +574,64 @@ export class Boss extends EnemyBase {
     this.animTime += dtf;
     this.phys(dtf, world);
 
-    // 点射：一次连发 3~5 发，与是否移动无关
+    // 点射：阶段越高，连发间隔越短
+    const burstGap = this.phase >= 3 ? 95 : (this.phase >= 2 ? 115 : 130);
+    const fireGap = this.phase >= 3 ? 480 : (this.phase >= 2 ? 620 : cfg.fireInterval);
     if (this.burstLeft > 0) {
       if (t >= this.nextBurstAt) {
         this.burstLeft--;
-        this.nextBurstAt = t + 130;
+        this.nextBurstAt = t + burstGap;
         return this.tryShoot(t, player, true);
       }
       return null;
     }
 
-    if (t - this.lastShot > cfg.fireInterval) {
-      this.burstLeft = 3 + Math.floor(Math.random() * 3);  // 3~5 发
-      this.nextBurstAt = t + 130;
+    if (t - this.lastShot > fireGap) {
+      const maxBurst = this.phase >= 3 ? 6 : (this.phase >= 2 ? 5 : 4);
+      this.burstLeft = 3 + Math.floor(Math.random() * (maxBurst - 2));
+      this.nextBurstAt = t + burstGap;
       this.burstLeft--;
       return this.tryShoot(t, player, true);
+    }
+
+    // 二阶段开始：近身时先震地，逼玩家跳起来
+    if (this.phase >= 2 && t > this.nextSlamAt && dist < cfg.nearRange && dist > 34) {
+      this.slamState = 'windup';
+      this.slamEnd = t + 520;
+      this.vx = 0;
+      return null;
     }
 
     // 距离较近且冷却就绪时发起冲撞
     if (t > this.nextActionAt && dist < 260 && dist > 40) {
       this.chargeState = 'windup';
-      this.chargeEnd = t + 450;   // 蓄力 450ms（给玩家反应时间）
+      this.chargeEnd = t + (this.phase >= 3 ? 360 : 450);
       this.vx = 0;
     }
 
     return null;
+  }
+
+  // 三阶段环形弹幕：10 发放射状能量球
+  radialBurst(t) {
+    const c = this.corePoint;
+    const count = 10;
+    const bullets = [];
+    const spin = this.animTime * 0.02;
+    for (let i = 0; i < count; i++) {
+      const a = (Math.PI * 2 * i) / count + spin;
+      bullets.push(new Bullet(c.x - 4, c.y - 4, Math.cos(a) * 2.9, Math.sin(a) * 2.9, {
+        width: 8,
+        height: 8,
+        damage: 1,
+        color: '#ff2e88',
+        owner: BulletOwner.ENEMY,
+        style: 'orb',
+        hitStop: 0,
+      }));
+    }
+    this.lastShot = t;
+    return bullets;
   }
 
   // 冲撞中对玩家造成接触伤害（由 Game 每帧调用）
@@ -466,5 +645,75 @@ export class Boss extends EnemyBase {
       return true;
     }
     return false;
+  }
+
+  draw(ctx, t) {
+    super.draw(ctx, t);
+    if (this.dead) return;
+
+    const c = this.corePoint;
+
+    // 三阶段核心：脉动光环 + 十字准星，提示这里吃双倍伤害
+    if (this.coreOpen) {
+      const pulse = 0.5 + 0.5 * Math.sin(t / 90);
+      const r = GameConfig.BOSS.coreRadius + 4 + pulse * 4;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const glow = ctx.createRadialGradient(c.x, c.y, 2, c.x, c.y, r * 2.2);
+      glow.addColorStop(0, 'rgba(255,255,255,0.9)');
+      glow.addColorStop(0.35, `rgba(255, 46, 136, ${0.55 + pulse * 0.25})`);
+      glow.addColorStop(1, 'rgba(255, 46, 136, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r * 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255, 220, 240, ${0.55 + pulse * 0.35})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#ffd7e8';
+      ctx.fillRect(Math.round(c.x) - 7, Math.round(c.y), 4, 1);
+      ctx.fillRect(Math.round(c.x) + 4, Math.round(c.y), 4, 1);
+      ctx.fillRect(Math.round(c.x), Math.round(c.y) - 7, 1, 4);
+      ctx.fillRect(Math.round(c.x), Math.round(c.y) + 4, 1, 4);
+      ctx.restore();
+    }
+
+    // 震地蓄力：脚下红色预警条 + 两侧箭头，告诉玩家该起跳了
+    if (this.slamState === 'windup') {
+      const feet = this.y + this.height;
+      const pulse = 0.5 + 0.5 * Math.sin(t / 55);
+      const span = 54 + pulse * 10;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = `rgba(255, 46, 74, ${0.30 + pulse * 0.25})`;
+      ctx.fillRect(Math.round(c.x - span), Math.round(feet) - 3, Math.round(span * 2), 3);
+      ctx.fillStyle = '#ff8a9a';
+      for (let i = -1; i <= 1; i++) {
+        const ax = Math.round(c.x + i * 18);
+        ctx.beginPath();
+        ctx.moveTo(ax, Math.round(feet) - 9);
+        ctx.lineTo(ax + 5, Math.round(feet) - 15);
+        ctx.lineTo(ax - 5, Math.round(feet) - 15);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // 阶段转换：扩散冲击环
+    if (this.phaseTransitionUntil > t) {
+      const p = 1 - (this.phaseTransitionUntil - t) / GameConfig.BOSS.phaseInvuln;
+      const radius = 10 + p * 46;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = `rgba(255, 220, 120, ${0.85 * (1 - p)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 }

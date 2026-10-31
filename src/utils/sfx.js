@@ -126,4 +126,24 @@ export class Sfx {
   empty() {
     this._tone({ freq: 190, slideTo: 85, type: 'square', dur: 0.12, vol: 0.13 });
   }
+
+  // BOSS 登场咆哮：低频锯齿下沉 + 噪声铺底
+  bossRoar() {
+    this._tone({ freq: 120, slideTo: 42, type: 'sawtooth', dur: 0.9, vol: 0.3 });
+    this._tone({ freq: 240, slideTo: 90, type: 'square', dur: 0.6, vol: 0.12 });
+    this._noise({ dur: 0.8, vol: 0.22, cutoff: 700 });
+  }
+
+  // 震地 / 冲击波
+  slam() {
+    this._tone({ freq: 90, slideTo: 28, type: 'sawtooth', dur: 0.4, vol: 0.34 });
+    this._noise({ dur: 0.32, vol: 0.3, cutoff: 620 });
+  }
+
+  // 阶段切换：上扬警报 + 破碎噪声
+  bossPhase() {
+    this._tone({ freq: 300, slideTo: 900, type: 'square', dur: 0.3, vol: 0.16 });
+    this._tone({ freq: 150, slideTo: 60, type: 'sawtooth', dur: 0.5, vol: 0.22 });
+    this._noise({ dur: 0.4, vol: 0.24, cutoff: 1800 });
+  }
 }

@@ -45,11 +45,37 @@ export class Bullet {
   }
 
   draw(ctx) {
+    if (this.style === 'orb') {
+      this.drawOrb(ctx);
+      return;
+    }
     if (this.style === 'plasma') {
       this.drawPlasma(ctx);
       return;
     }
     this.drawTracer(ctx);
+  }
+
+  // 圆形能量弹：Boss 环形弹幕使用，不依赖速度方向
+  drawOrb(ctx) {
+    const cx = this.x + this.width / 2;
+    const cy = this.y + this.height / 2;
+    const pulse = 0.85 + 0.15 * Math.sin(this.age * 1.4);
+    const r = Math.max(3, (this.width * 0.5) * pulse);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const glow = ctx.createRadialGradient(cx, cy, 1, cx, cy, r * 2.4);
+    glow.addColorStop(0, 'rgba(255,255,255,0.95)');
+    glow.addColorStop(0.35, hexToRgba(this.color, 0.9));
+    glow.addColorStop(1, hexToRgba(this.color, 0));
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 2.4, 0, Math.PI * 2);
+    ctx.fill();
+    const core = Math.max(2, Math.round(r * 0.7));
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(Math.round(cx - core / 2), Math.round(cy - core / 2), core, core);
+    ctx.restore();
   }
 
   drawTracer(ctx) {
