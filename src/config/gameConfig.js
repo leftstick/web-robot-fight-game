@@ -53,6 +53,56 @@ export const GameConfig = {
     coverPeekTime: 700,     // 探头射击时长
   },
 
+  // —— 敌人谱系：在暴徒基础上拉出三种战术定位 ——
+  RUSHER: {                 // 疾行者：贴脸冲撞，逼玩家走位
+    width: 18,
+    height: 56,
+    crouchHeight: 32,
+    speed: 1.65,
+    hp: 2,
+    score: 150,
+    fireInterval: 0,
+    bulletSpeed: 0,
+    bulletDamage: 0,
+    engageRange: 0,
+    chargeRange: 170,       // 进入该距离后起手冲撞
+    chargeWindup: 420,      // 冲撞前摇(ms)
+    chargeDuration: 520,    // 冲撞持续(ms)
+    chargeSpeed: 3.8,
+    chargeCooldown: 1500,
+    contactDamage: 1,
+  },
+
+  GUNNER: {                 // 扫射兵：保持中距离，三连发压制
+    width: 18,
+    height: 56,
+    crouchHeight: 32,
+    speed: 0.85,
+    hp: 3,
+    score: 150,
+    fireInterval: 1500,
+    bulletSpeed: 3.6,
+    bulletDamage: 1,
+    engageRange: 210,
+    burst: 3,               // 每轮连发数
+    burstGap: 105,          // 连发间隔(ms)
+    spread: 0.6,            // 单发散布(deg)
+  },
+
+  SNIPER: {                 // 狙击手：远程蓄力，锁定后打重弹
+    width: 18,
+    height: 56,
+    crouchHeight: 32,
+    speed: 0.55,
+    hp: 2,
+    score: 200,
+    fireInterval: 2200,
+    bulletSpeed: 6.2,
+    bulletDamage: 2,
+    engageRange: 300,
+    aimTime: 750,           // 瞄准红线持续(ms)
+  },
+
   BOSS: {                   // 关底帮派 BOSS
     width: 30,
     height: 80,

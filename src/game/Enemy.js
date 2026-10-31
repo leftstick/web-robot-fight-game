@@ -7,6 +7,13 @@ function aabb(a, b) {
          a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
+// 兵种色标：头顶菱形，让玩家一眼分清优先处理谁
+const ARCHETYPE_COLORS = {
+  rusher: '#ff2e4a',
+  gunner: '#ffa23d',
+  sniper: '#5fe6ff',
+};
+
 // 人形暴徒：从屏幕右侧进入、向左推进、会站立/走动/开枪、利用掩体。
 class EnemyBase {
   constructor(cfg, sheetKey, feetX, feetY) {
@@ -35,7 +42,19 @@ class EnemyBase {
     this.animTime = Math.random() * 100;
     this.shootAnimUntil = 0;
     this.lastShot = -9999;
-      this.cover = null;
+    this.cover = null;
+
+    this.archetype = null;   // rusher | gunner | sniper，普通暴徒为 null
+    this.elite = false;
+  }
+
+  // 精英化：更硬、分更高，外观由 draw 里的金色光环体现
+  applyElite() {
+    this.elite = true;
+    this.hp = Math.round(this.hp * 1.8);
+    this.maxHp = this.hp;
+    this.score = Math.round(this.score * 2);
+    return this;
   }
 
   getBounds() {
@@ -114,7 +133,7 @@ class EnemyBase {
     return { x, y };
   }
 
-  tryShoot(t, player, force = false) {
+  tryShoot(t, player, force = false, spreadDeg = 0) {
     if (!force && t - this.lastShot < this.cfg.fireInterval) return null;
     this.lastShot = t;
     this.shootAnimUntil = t + 130;
@@ -133,7 +152,18 @@ class EnemyBase {
     let vy = (dy / dx) * speed;
     vy = Math.max(-3.2, Math.min(3.2, vy));
 
-    const bullet = new Bullet(x, gunY - eb.height / 2, speed * facing, vy, {
+    // 扫射兵让弹道绕枪口做小幅旋转，形成扇形压制
+    let vx = speed * facing;
+    if (spreadDeg) {
+      const a = ((Math.random() * 2 - 1) * spreadDeg * Math.PI) / 180;
+      const cos = Math.cos(a);
+      const sin = Math.sin(a);
+      const nx = vx * cos - vy * sin;
+      vy = vx * sin + vy * cos;
+      vx = nx;
+    }
+
+    const bullet = new Bullet(x, gunY - eb.height / 2, vx, vy, {
       width: eb.width,
       height: eb.height,
       damage: this.cfg.bulletDamage,
@@ -241,6 +271,52 @@ class EnemyBase {
     }
     sheet.draw(ctx, frame, cx, feet, this.facing, flash);
     ctx.restore();
+
+    if (this.dead) return;
+
+    // 精英光环：脚下金色光池 + 环绕椭圆，和普通兵一眼区分
+    if (this.elite) {
+      const pulse = 0.5 + 0.5 * Math.sin(t / 180);
+      const r = Math.max(16, this.width * 1.15);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(cx, feet - 3, 1, cx, feet - 3, r);
+      g.addColorStop(0, `rgba(255, 209, 102, ${0.22 + pulse * 0.12})`);
+      g.addColorStop(1, 'rgba(255, 209, 102, 0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(cx - r, feet - r, r * 2, r * 2);
+      ctx.strokeStyle = `rgba(255, 226, 150, ${0.55 + pulse * 0.35})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(cx, feet - 2, r * 0.55, r * 0.2, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 兵种色标：头顶菱形
+    const markerColor = ARCHETYPE_COLORS[this.archetype];
+    if (markerColor) {
+      const pulse = 0.5 + 0.5 * Math.sin(t / 150);
+      const mx = Math.round(cx);
+      const my = Math.round(this.y) - 7;
+      ctx.save();
+      ctx.fillStyle = markerColor;
+      ctx.beginPath();
+      ctx.moveTo(mx, my - 3);
+      ctx.lineTo(mx + 3, my + 1);
+      ctx.lineTo(mx, my + 3);
+      ctx.lineTo(mx - 3, my + 1);
+      ctx.closePath();
+      ctx.fill();
+      if (this.elite) {
+        ctx.strokeStyle = 'rgba(255, 226, 150, 0.9)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      ctx.fillStyle = `rgba(255,255,255,${0.4 + pulse * 0.4})`;
+      ctx.fillRect(mx - 1, my - 1, 2, 2);
+      ctx.restore();
+    }
   }
 }
 
@@ -347,6 +423,266 @@ export class Thug extends EnemyBase {
       best.claimedBy = this;
     }
   }
+}
+
+// 疾行者：不找掩体，贴脸后蓄力冲撞。冲撞可被跳跃或走位躲开。
+export class Rusher extends EnemyBase {
+  constructor(feetX, feetY) {
+    super(GameConfig.RUSHER, 'thug_mohawk', feetX, feetY);
+    this.archetype = 'rusher';
+    this.chargeState = 'idle';   // idle | windup | charging | recover
+    this.chargeEnd = 0;
+    this.nextChargeAt = 0;
+    this.chargeDir = 1;
+    this.chargeDamageDealt = false;
+  }
+
+  update(dtf, deltaTime, t, world, player) {
+    if (this.dead) return null;
+    this.updateFacing(player);
+
+    const cfg = GameConfig.RUSHER;
+    const pcx = player.x + player.width / 2;
+    const mycx = this.getCenterX();
+    const dist = Math.abs(pcx - mycx);
+
+    if (this.chargeState === 'windup') {
+      this.vx = 0;
+      this.animTime += dtf * 0.6;
+      this.phys(dtf, world);
+      if (t >= this.chargeEnd) {
+        this.chargeState = 'charging';
+        this.chargeDir = this.facing;
+        this.chargeEnd = t + cfg.chargeDuration;
+        this.chargeDamageDealt = false;
+      }
+      return null;
+    }
+
+    if (this.chargeState === 'charging') {
+      this.vx = this.chargeDir * cfg.chargeSpeed;
+      this.animTime += dtf * 1.8;
+      this.phys(dtf, world);
+      if (t >= this.chargeEnd) {
+        this.chargeState = 'recover';
+        this.chargeEnd = t + 380;
+        this.nextChargeAt = t + cfg.chargeCooldown;
+      }
+      return null;
+    }
+
+    if (this.chargeState === 'recover') {
+      this.vx *= 0.8;
+      if (Math.abs(this.vx) < 0.1) this.vx = 0;
+      this.animTime += dtf;
+      this.phys(dtf, world);
+      if (t >= this.chargeEnd) this.chargeState = 'idle';
+      return null;
+    }
+
+    // idle：持续逼近，进入冲撞距离就起手
+    const side = Math.sign(mycx - pcx) || 1;
+    const dxTarget = (pcx + side * 52) - this.x;
+    this.vx = Math.abs(dxTarget) > 6 ? Math.sign(dxTarget) * cfg.speed : 0;
+    this.animTime += dtf * (this.vx !== 0 ? 1.5 : 1);
+    this.phys(dtf, world);
+
+    if (t > this.nextChargeAt && dist < cfg.chargeRange && dist > 20) {
+      this.chargeState = 'windup';
+      this.chargeEnd = t + cfg.chargeWindup;
+      this.vx = 0;
+      this.chargeDir = this.facing;
+    }
+    return null;
+  }
+
+  // 冲撞接触伤害，由 Game 每帧调用；一次冲撞只结算一次
+  tryChargeHit(player, currentTime) {
+    if (this.chargeState !== 'charging' || this.chargeDamageDealt) return false;
+    if (aabb(player.getBounds(), this.getBounds())) {
+      this.chargeDamageDealt = true;
+      return true;
+    }
+    return false;
+  }
+
+  draw(ctx, t) {
+    super.draw(ctx, t);
+    if (this.dead || this.chargeState !== 'windup') return;
+
+    // 蓄力时在地面画一条朝向前方的红色冲刺指示
+    const feet = this.y + this.height;
+    const cx = this.getCenterX();
+    const dir = this.facing;
+    const pulse = 0.5 + 0.5 * Math.sin(t / 50);
+    const len = 26 + pulse * 8;
+    const startX = cx + dir * 10;
+    const tip = startX + dir * len;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = `rgba(255, 46, 74, ${0.28 + pulse * 0.25})`;
+    ctx.fillRect(Math.min(startX, tip), feet - 3, len, 3);
+    ctx.beginPath();
+    ctx.moveTo(tip + dir * 7, feet - 5);
+    ctx.lineTo(tip, feet - 10);
+    ctx.lineTo(tip, feet);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// 扫射兵：保持中距离，三连发点射，弹道带轻微散布
+export class Gunner extends EnemyBase {
+  constructor(feetX, feetY) {
+    super(GameConfig.GUNNER, 'thug_mask', feetX, feetY);
+    this.archetype = 'gunner';
+    this.burstLeft = 0;
+    this.nextBurstAt = 0;
+  }
+
+  update(dtf, deltaTime, t, world, player) {
+    if (this.dead) return null;
+    this.updateFacing(player);
+
+    const cfg = GameConfig.GUNNER;
+    const pcx = player.x + player.width / 2;
+    const mycx = this.getCenterX();
+    const dist = Math.abs(pcx - mycx);
+
+    const side = Math.sign(mycx - pcx) || 1;
+    const dxTarget = (pcx + side * cfg.engageRange) - this.x;
+    this.vx = Math.abs(dxTarget) > 10 ? Math.sign(dxTarget) * cfg.speed : 0;
+    this.animTime += dtf * (this.vx !== 0 ? 1 : 0.5);
+    this.phys(dtf, world);
+
+    if (dist > cfg.engageRange + 150) return null;
+
+    if (this.burstLeft > 0) {
+      if (t >= this.nextBurstAt) {
+        this.burstLeft--;
+        this.nextBurstAt = t + cfg.burstGap;
+        return this.tryShoot(t, player, true, cfg.spread);
+      }
+      return null;
+    }
+
+    if (t - this.lastShot >= cfg.fireInterval) {
+      this.burstLeft = cfg.burst - 1;
+      this.nextBurstAt = t + cfg.burstGap;
+      return this.tryShoot(t, player, true, cfg.spread);
+    }
+    return null;
+  }
+}
+
+// 狙击手：远距离蓄力瞄准，锁定后发射高速重弹；红线提示玩家躲闪
+export class Sniper extends EnemyBase {
+  constructor(feetX, feetY) {
+    super(GameConfig.SNIPER, 'thug_bald', feetX, feetY);
+    this.archetype = 'sniper';
+    this.aiming = false;
+    this.aimUntil = 0;
+    this.aimTarget = null;
+  }
+
+  update(dtf, deltaTime, t, world, player) {
+    if (this.dead) return null;
+    this.updateFacing(player);
+
+    const cfg = GameConfig.SNIPER;
+    const pcx = player.x + player.width / 2;
+    const mycx = this.getCenterX();
+    const dist = Math.abs(pcx - mycx);
+
+    if (this.aiming) {
+      this.vx = 0;
+      this.animTime += dtf * 0.35;
+      this.phys(dtf, world);
+      if (t >= this.aimUntil) {
+        this.aiming = false;
+        this.lastShot = t;
+        const target = this.aimTarget;
+        this.aimTarget = null;
+        return this.fireAt(target);
+      }
+      return null;
+    }
+
+    const side = Math.sign(mycx - pcx) || 1;
+    const dxTarget = (pcx + side * cfg.engageRange) - this.x;
+    this.vx = Math.abs(dxTarget) > 12 ? Math.sign(dxTarget) * cfg.speed : 0;
+    this.animTime += dtf;
+    this.phys(dtf, world);
+
+    if (dist < cfg.engageRange + 80 && t - this.lastShot >= cfg.fireInterval) {
+      this.aiming = true;
+      this.aimUntil = t + cfg.aimTime;
+      this.aimTarget = { x: pcx, y: player.y + player.height * 0.5 };
+      this.vx = 0;
+    }
+    return null;
+  }
+
+  fireAt(target) {
+    const muzzle = this.getMuzzle();
+    const dx = target.x - muzzle.x;
+    const dy = target.y - muzzle.y;
+    const len = Math.max(1, Math.hypot(dx, dy));
+    const speed = this.cfg.bulletSpeed;
+    return new Bullet(muzzle.x, muzzle.y - 1.5, (dx / len) * speed, (dy / len) * speed, {
+      width: 16,
+      height: 3,
+      damage: this.cfg.bulletDamage,
+      color: '#5fe6ff',
+      owner: BulletOwner.ENEMY,
+      style: 'rifle',
+      sfx: 'sniperShot',
+      impactShake: 8,
+      impactShakeIntensity: 5,
+      hitStop: 30,
+    });
+  }
+
+  draw(ctx, t) {
+    super.draw(ctx, t);
+    if (this.dead || !this.aiming || !this.aimTarget) return;
+
+    // 瞄准线：从枪口指向锁定的躯干位置，闪烁提示开枪时机
+    const muzzle = this.getMuzzle();
+    const target = this.aimTarget;
+    const pulse = 0.5 + 0.5 * Math.sin(t / 70);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(95, 230, 255, ${0.22 + pulse * 0.38})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(Math.round(muzzle.x), Math.round(muzzle.y));
+    ctx.lineTo(Math.round(target.x), Math.round(target.y));
+    ctx.stroke();
+
+    const r = 5 + pulse * 2;
+    ctx.strokeStyle = `rgba(95, 230, 255, ${0.55 + pulse * 0.3})`;
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(220, 248, 255, 0.9)';
+    ctx.fillRect(Math.round(target.x) - 1, Math.round(target.y) - 1, 2, 2);
+    ctx.restore();
+  }
+}
+
+// 兵种工厂：关卡数据只写 type/elite，这里统一实例化
+export function createEnemy(type, feetX, feetY, elite = false) {
+  let enemy;
+  switch (type) {
+    case 'rusher': enemy = new Rusher(feetX, feetY); break;
+    case 'gunner': enemy = new Gunner(feetX, feetY); break;
+    case 'sniper': enemy = new Sniper(feetX, feetY); break;
+    default: enemy = new Thug(feetX, feetY);
+  }
+  if (elite) enemy.applyElite();
+  return enemy;
 }
 
 export class Boss extends EnemyBase {

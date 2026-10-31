@@ -1,6 +1,6 @@
 import { GameConfig } from '../config/gameConfig.js';
 import { Player } from './Player.js';
-import { Thug, Boss } from './Enemy.js';
+import { Thug, Boss, createEnemy } from './Enemy.js';
 import { ParticleSystem } from './Particle.js';
 import { EffectSystem } from './Effects.js';
 import { SceneRenderer } from './SceneRenderer.js';
@@ -423,12 +423,13 @@ export class Game {
   beginEncounter(enc) {
     this.activeEncounter = enc;
     for (const s of enc.spawns) {
-      const thug = new Thug(s.x, s.y != null ? s.y : GameConfig.GROUND_Y);
-      thug.awake = true;
-      thug.encounterId = enc.id;
-      this.enemies.push(thug);
-      this.effectSystem.explosion(s.x, (s.y != null ? s.y : GameConfig.GROUND_Y) - 16);
-      this.particleSystem.createExplosion(s.x, (s.y != null ? s.y : GameConfig.GROUND_Y) - 16, '#ff2e88', 8);
+      const y = s.y != null ? s.y : GameConfig.GROUND_Y;
+      const enemy = createEnemy(s.type, s.x, y, s.elite);
+      enemy.awake = true;
+      enemy.encounterId = enc.id;
+      this.enemies.push(enemy);
+      this.effectSystem.explosion(s.x, y - 16);
+      this.particleSystem.createExplosion(s.x, y - 16, '#ff2e88', 8);
     }
     const zone = this.encounterIndex + 1;
     const label = enc.label ? ` · ${enc.label}` : '';
@@ -718,7 +719,7 @@ export class Game {
         // 敌人枪口火焰（与精灵枪管对齐）
         const muzzle = e.getMuzzle();
         this.effectSystem.muzzleFlash(muzzle.x, muzzle.y, e.facing);
-        this.sfx.enemyShoot();
+        this.playEnemyShotSfx(result);
       }
       if (e.hitFlash > 0) e.hitFlash -= this.deltaTime;
 
@@ -736,6 +737,15 @@ export class Game {
           this.addScreenShake(14, 8);
         }
       }
+    }
+  }
+
+  // 敌人子弹可携带专属枪声（狙击弹），其余沿用通用敌方枪声
+  playEnemyShotSfx(bullet) {
+    if (bullet.sfx && typeof this.sfx[bullet.sfx] === 'function') {
+      this.sfx[bullet.sfx]();
+    } else {
+      this.sfx.enemyShoot();
     }
   }
 

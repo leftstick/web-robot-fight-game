@@ -101,6 +101,13 @@ export class Sfx {
     this._tone({ freq: 520, slideTo: 220, type: 'sawtooth', dur: 0.09, vol: 0.11 });
   }
 
+  // 狙击手重弹：先是一声高频锁定音，再是低频重击
+  sniperShot() {
+    this._tone({ freq: 1400, slideTo: 620, type: 'square', dur: 0.07, vol: 0.12 });
+    this._tone({ freq: 180, slideTo: 46, type: 'sawtooth', dur: 0.26, vol: 0.2 });
+    this._noise({ dur: 0.14, vol: 0.12, cutoff: 2600 });
+  }
+
   throwGrenade() {
     this._tone({ freq: 260, slideTo: 170, type: 'triangle', dur: 0.12, vol: 0.16 });
   }

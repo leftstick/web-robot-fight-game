@@ -30,6 +30,7 @@ export class Bullet {
     this.impactShake = options.impactShake ?? 4;
     this.impactShakeIntensity = options.impactShakeIntensity ?? 3;
     this.hitStop = options.hitStop ?? 22;
+    this.sfx = options.sfx || null;               // 发射音效名，由 Game 播放
     this.age = 0;
     this.active = true;
   }

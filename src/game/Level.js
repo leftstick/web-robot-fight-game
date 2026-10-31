@@ -122,6 +122,8 @@ function scaleLevel(d) {
       spawns: (enc.spawns || []).map(e => ({
         x: Math.round(e.x * SCALE),
         y: e.y != null ? Math.round(e.y * SCALE) : undefined,
+        type: e.type || 'thug',
+        elite: !!e.elite,
       })),
     })),
     checkpoints: (d.checkpoints || []).map(c => ({ x: Math.round(c.x * SCALE) })),
@@ -165,6 +167,8 @@ export class Level {
       spawns: (enc.spawns || []).map((e) => ({
         x: e.x,
         y: e.y != null ? e.y : GameConfig.GROUND_Y,
+        type: e.type || 'thug',
+        elite: !!e.elite,
       })),
     }));
     this.totalEnemies = this.encounters.reduce(
