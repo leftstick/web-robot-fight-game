@@ -14,7 +14,7 @@ function inferType(w, h) {
 }
 
 export class Cover {
-  constructor(x, y, w, h, hp, destructible, type) {
+  constructor(x, y, w, h, hp, destructible, type, loot = null, secret = false) {
     this.type = COVER_INFO[type] ? type : inferType(w, h);
     this.typeIndex = COVER_TYPES.indexOf(this.type);
     if (this.typeIndex < 0) this.typeIndex = 0;
@@ -29,6 +29,8 @@ export class Cover {
     this.maxHp = hp;
     this.hp = hp;
     this.destructible = destructible !== false;
+    this.loot = loot;
+    this.secret = !!secret;
     this.hitFlash = 0;
     this.claimedBy = null;
   }
@@ -82,6 +84,28 @@ export class Cover {
     sheet.drawFrame(ctx, frame, dx, dy, fw, fh);
     if (this.hitFlash > 0 && stage < 2) {
       sheet.drawFrameFlash(ctx, frame, dx, dy, fw, fh, 0.65);
+    }
+
+    // 隐藏补给：四角金色描边 + 上方闪烁信号点，提示这里可以打
+    if (this.secret && this.hp > 0) {
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 260);
+      const bx = Math.round(this.x) - 1;
+      const by = Math.round(this.y) - 1;
+      const bw = this.w + 2;
+      const bh = this.h + 2;
+      const arm = Math.max(3, Math.round(Math.min(bw, bh) * 0.28));
+      ctx.save();
+      ctx.strokeStyle = `rgba(255, 209, 102, ${0.35 + pulse * 0.4})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(bx, by + arm); ctx.lineTo(bx, by); ctx.lineTo(bx + arm, by);
+      ctx.moveTo(bx + bw - arm, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + arm);
+      ctx.moveTo(bx, by + bh - arm); ctx.lineTo(bx, by + bh); ctx.lineTo(bx + arm, by + bh);
+      ctx.moveTo(bx + bw - arm, by + bh); ctx.lineTo(bx + bw, by + bh); ctx.lineTo(bx + bw, by + bh - arm);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(255, 232, 150, ${0.45 + pulse * 0.5})`;
+      ctx.fillRect(bx + bw / 2 - 1, by - 5 - Math.round(pulse * 2), 2, 2);
+      ctx.restore();
     }
   }
 

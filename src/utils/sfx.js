@@ -146,4 +146,15 @@ export class Sfx {
     this._tone({ freq: 150, slideTo: 60, type: 'sawtooth', dur: 0.5, vol: 0.22 });
     this._noise({ dur: 0.4, vol: 0.24, cutoff: 1800 });
   }
+
+  // 遭遇闸门：机械锁扣 + 短促电流
+  gate() {
+    this._tone({ freq: 180, slideTo: 90, type: 'square', dur: 0.18, vol: 0.16 });
+    this._noise({ dur: 0.22, vol: 0.13, cutoff: 2200 });
+  }
+
+  // 蒸汽喷发：高频噪声嘶声
+  steam() {
+    this._noise({ dur: 0.6, vol: 0.15, cutoff: 3000 });
+  }
 }

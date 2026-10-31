@@ -72,6 +72,13 @@ export class Game {
     this.shockwaves = [];
     this.arenaPlatformsAdded = false;
 
+    // 关卡节奏：分区遭遇、检查点、场景机关
+    this.encounterIndex = 0;
+    this.activeEncounter = null;
+    this.totalEnemyCount = 0;
+    this.encounterGateFlash = 0;
+    this.encounterGateFlashX = null;
+
     // 结算统计
     this.levelStartedAt = 0;
     this.clearTime = 0;
@@ -182,6 +189,11 @@ export class Game {
     this.cinematic = null;
     this.shockwaves = [];
     this.arenaPlatformsAdded = false;
+    this.encounterIndex = 0;
+    this.activeEncounter = null;
+    this.totalEnemyCount = this.level.totalEnemies || 0;
+    this.encounterGateFlash = 0;
+    this.encounterGateFlashX = null;
     this.levelStartedAt = performance.now();
     this.clearTime = 0;
     this.shotsFired = 0;
@@ -196,7 +208,8 @@ export class Game {
     this.cameraX = clamp(this.level.playerSpawn.x - this.logicalW * 0.4, 0, this.level.worldWidth - this.logicalW);
 
     this.player = new Player(this.level.playerSpawn.x);
-    this.enemies = this.level.enemySpawns.map((sp) => new Thug(sp.x, sp.y));
+    // 敌人按遭遇波次生成，不再开场全量铺满
+    this.enemies = [];
 
     this.input.clearJustPressed();
     this.sfx.resume();
@@ -210,8 +223,7 @@ export class Game {
 
   emitRemaining(force) {
     if (!this.level) return;
-    const total = this.level.enemySpawns.length;
-    const remaining = Math.max(0, total - this.totalKills);
+    const remaining = Math.max(0, this.totalEnemyCount - this.totalKills);
     if (force || remaining !== this._lastRemaining) {
       this._lastRemaining = remaining;
       if (this.onEnemyCountChange) this.onEnemyCountChange(remaining);
@@ -346,15 +358,27 @@ export class Game {
 
     p.update(dtf, this.world, this.currentTime);
 
+    // 分区遭遇：触发刷怪、清空开闸，未清场时玩家被挡在闸门前
+    this.updateEncounters();
+    if (this.activeEncounter && this.activeEncounter.gateX != null) {
+      p.x = Math.min(p.x, this.activeEncounter.gateX - p.width - 2);
+    }
+
     // Boss 竞技场封锁：玩家不能越过两侧能量闸门
     if (this.bossArena) {
       p.x = clamp(p.x, this.bossArena.x1 + 2, this.bossArena.x2 - p.width - 2);
+    }
+
+    if (this.encounterGateFlash > 0) {
+      this.encounterGateFlash = Math.max(0, this.encounterGateFlash - this.deltaTime);
     }
 
     this.updateCamera();
     this.updateBullets(dtf);
     this.updateEnemies(dtf);
     this.updateShockwaves(dtf);
+    this.updateHazards();
+    this.updateCheckpoints();
     this.updatePickups(dtf);
     this.updateGrenades(dtf);
     this.spawnBoss();
@@ -378,6 +402,97 @@ export class Game {
       switchWeapon: false,
       melee: false,
     };
+  }
+
+  // —— 分区遭遇：踩到 triggerX 刷出整波敌人，清空后闸门放行 ——
+  updateEncounters() {
+    if (!this.level || !this.level.encounters) return;
+    if (this.bossArena || this.bossSpawned) return;
+
+    const enc = this.activeEncounter;
+    if (!enc) {
+      const next = this.level.encounters[this.encounterIndex];
+      if (next && this.player.x >= next.triggerX) this.beginEncounter(next);
+      return;
+    }
+
+    const alive = this.enemies.some((e) => !e.dead && e.encounterId === enc.id);
+    if (!alive) this.clearEncounter(enc);
+  }
+
+  beginEncounter(enc) {
+    this.activeEncounter = enc;
+    for (const s of enc.spawns) {
+      const thug = new Thug(s.x, s.y != null ? s.y : GameConfig.GROUND_Y);
+      thug.awake = true;
+      thug.encounterId = enc.id;
+      this.enemies.push(thug);
+      this.effectSystem.explosion(s.x, (s.y != null ? s.y : GameConfig.GROUND_Y) - 16);
+      this.particleSystem.createExplosion(s.x, (s.y != null ? s.y : GameConfig.GROUND_Y) - 16, '#ff2e88', 8);
+    }
+    const zone = this.encounterIndex + 1;
+    const label = enc.label ? ` · ${enc.label}` : '';
+    this.showPickupToast(`ZONE ${zone}${label}`, '#ff2e88');
+    this.addScreenShake(8, 4);
+    this.sfx.gate();
+  }
+
+  clearEncounter(enc) {
+    this.activeEncounter = null;
+    this.encounterIndex++;
+    this.encounterGateFlash = 650;
+    this.encounterGateFlashX = enc.gateX;
+    this.addScore(100);
+    this.showPickupToast('区域清空 · 闸门开启', '#39ff88');
+    this.sfx.gate();
+  }
+
+  // —— 蒸汽口：周期性预警 → 喷发，站上去会掉血 ——
+  hazardPhase(index, t) {
+    return ((t + index * 900) % 4200) / 4200;
+  }
+
+  updateHazards() {
+    if (!this.level || !this.level.hazards) return;
+    const p = this.player;
+    for (let i = 0; i < this.level.hazards.length; i++) {
+      const h = this.level.hazards[i];
+      const phase = this.hazardPhase(i, this.currentTime);
+      const active = phase >= 0.5 && phase < 0.72;
+      if (active && !h.wasActive) this.sfx.steam();
+
+      if (active && !p.isInvincibleNow(this.currentTime)) {
+        const rect = { x: h.x, y: GameConfig.GROUND_Y - 26, width: h.w, height: 26 };
+        if (aabb(rect, p.getBounds())) {
+          this.damagePlayer();
+          this.addScreenShake(6, 4);
+        }
+      }
+      h.wasActive = active;
+    }
+  }
+
+  // —— 检查点：首次经过恢复 1 点生命 ——
+  updateCheckpoints() {
+    if (!this.level || !this.level.checkpoints) return;
+    const p = this.player;
+    const pb = p.getBounds();
+    for (const cp of this.level.checkpoints) {
+      if (cp.used) continue;
+      const rect = { x: cp.x - 10, y: GameConfig.GROUND_Y - 44, width: 20, height: 44 };
+      if (!aabb(pb, rect)) continue;
+      cp.used = true;
+      cp.usedAt = this.currentTime;
+      if (this.lives < GameConfig.PLAYER.lives) {
+        this.lives++;
+        if (this.onLivesChange) this.onLivesChange(this.lives);
+        this.showPickupToast('检查点 · 生命 +1', '#39ff88');
+      } else {
+        this.addScore(50);
+        this.showPickupToast('检查点 · 安全区', '#39ff88');
+      }
+      this.sfx.pickup();
+    }
   }
 
   // 自动切刀：检测玩家附近是否有敌人
@@ -470,15 +585,7 @@ export class Game {
         const hy = b.y + b.height / 2;
         this.bulletImpactFx(b, hx, hy);
         this.addHitStop(b.hitStop);
-        if (c.takeDamage(b.damage)) {
-          const cc = c.getCenter();
-          this.effectSystem.explosion(cc.x, cc.y);
-          this.particleSystem.createExplosion(cc.x, cc.y, '#ffb347', 10);
-          this.addScreenShake(12, 6);
-          this.addHitStop(55);
-          this.sfx.explosion();
-          this.releaseCoverClaims(c);
-        }
+        if (c.takeDamage(b.damage)) this.destroyCover(c);
         return;
       }
     }
@@ -550,6 +657,25 @@ export class Game {
   releaseCoverClaims(cover) {
     for (const e of this.enemies) {
       if (e.cover === cover) e.cover = null;
+    }
+  }
+
+  // 掩体破碎统一入口：特效 + 释放掩体占用 + 隐藏补给掉落
+  destroyCover(cover) {
+    const cc = cover.getCenter();
+    this.effectSystem.explosion(cc.x, cc.y);
+    this.particleSystem.createExplosion(cc.x, cc.y, '#ffb347', 10);
+    this.addScreenShake(12, 6);
+    this.addHitStop(55);
+    this.sfx.explosion();
+    this.releaseCoverClaims(cover);
+
+    if (cover.loot) {
+      const pk = this.spawnPickup(cover.loot, cc.x, GameConfig.GROUND_Y);
+      if (pk) {
+        this.showPickupToast('发现隐藏补给', '#ffe066');
+        this.sfx.pickup();
+      }
     }
   }
 
@@ -715,7 +841,7 @@ export class Game {
       const cc = cov.getCenter();
       const d = Math.hypot(cc.x - c.x, cc.y - c.y);
       if (d < radius && cov.takeDamage(GameConfig.GRENADE.damage)) {
-        this.releaseCoverClaims(cov);
+        this.destroyCover(cov);
       }
     }
   }
@@ -1109,13 +1235,18 @@ export class Game {
       // 平台（浮空平台）
       this.drawPlatforms(ctx);
 
+      // 贴地机关与检查点信标（在掩体和角色之下）
+      this.drawHazards(ctx);
+      this.drawCheckpoints(ctx);
+
       // 掩体
       for (const c of this.level.covers) {
         if (this.isVisible(c.x, c.w)) c.draw(ctx);
       }
 
-      // Boss 竞技场能量闸门 + 震地冲击波
+      // Boss 竞技场能量闸门 + 遭遇闸门 + 震地冲击波
       this.drawArenaGates(ctx);
+      this.drawEncounterGate(ctx);
       this.drawShockwaves(ctx);
 
       // 掉落物：在角色之后、敌人之前，避免遮住战斗主体
@@ -1192,6 +1323,197 @@ export class Game {
         ctx.lineTo(x - 5, ay + 6);
         ctx.closePath();
         ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  // 遭遇闸门：锁定时红橙能量墙，清场后绿色脉冲开闸
+  drawEncounterGate(ctx) {
+    const enc = this.activeEncounter;
+    const flashing = this.encounterGateFlash > 0 && this.encounterGateFlashX != null;
+    if ((!enc || enc.gateX == null) && !flashing) return;
+
+    const locked = !!(enc && enc.gateX != null);
+    const x = Math.round(locked ? enc.gateX : this.encounterGateFlashX);
+    const ground = GameConfig.GROUND_Y;
+    const top = ground - 132;
+    const t = this.currentTime;
+
+    if (!locked) {
+      // 开闸：绿色光柱向外扩散并淡出
+      const k = clamp(this.encounterGateFlash / 650, 0, 1);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const off = (1 - k) * 10;
+      ctx.fillStyle = `rgba(57, 255, 136, ${0.55 * k})`;
+      ctx.fillRect(Math.round(x - off) - 1, top, 2, ground - top);
+      ctx.fillRect(Math.round(x + off) - 1, top, 2, ground - top);
+      ctx.fillStyle = `rgba(210, 255, 230, ${0.8 * k})`;
+      ctx.fillRect(x - 1, ground - 8, 2, 8);
+      ctx.restore();
+      return;
+    }
+
+    const flicker = 0.82 + 0.18 * Math.sin(t / 70);
+
+    // 上下发射器
+    ctx.fillStyle = '#0a0d12';
+    ctx.fillRect(x - 7, top - 5, 14, 7);
+    ctx.fillRect(x - 7, ground - 6, 14, 6);
+    ctx.fillStyle = '#2a3444';
+    ctx.fillRect(x - 5, top - 3, 10, 2);
+    ctx.fillRect(x - 5, ground - 5, 10, 2);
+    ctx.fillStyle = `rgba(255, 90, 60, ${0.85 * flicker})`;
+    ctx.fillRect(x - 2, top, 4, 2);
+    ctx.fillRect(x - 2, ground - 8, 4, 2);
+
+    // 能量场
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const grd = ctx.createLinearGradient(0, top, 0, ground);
+    grd.addColorStop(0, 'rgba(255, 90, 60, 0)');
+    grd.addColorStop(0.32, `rgba(255, 90, 60, ${0.40 * flicker})`);
+    grd.addColorStop(0.72, `rgba(255, 120, 70, ${0.26 * flicker})`);
+    grd.addColorStop(1, `rgba(255, 190, 110, ${0.64 * flicker})`);
+    ctx.fillStyle = grd;
+    ctx.fillRect(x - 4, top, 8, ground - top);
+
+    // 两侧导轨：让封锁线在霓虹背景里也能一眼看清
+    ctx.fillStyle = `rgba(255, 150, 90, ${0.85 * flicker})`;
+    ctx.fillRect(x - 4, top, 1, ground - top);
+    ctx.fillRect(x + 3, top, 1, ground - top);
+
+    const span = ground - top;
+    for (let i = 0; i < 5; i++) {
+      const yy = top + ((t * 0.06 + i * span / 5) % span);
+      ctx.fillStyle = `rgba(255, 233, 210, ${0.45 * flicker})`;
+      ctx.fillRect(x - 4, Math.round(yy), 8, 1);
+    }
+    ctx.restore();
+
+    // 顶部锁定菱形 + 剩余敌人刻度
+    ctx.save();
+    ctx.translate(x, top - 12);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = 'rgba(8, 10, 14, 0.92)';
+    ctx.fillRect(-4, -4, 8, 8);
+    ctx.fillStyle = '#ff5a3c';
+    ctx.fillRect(-2, -2, 4, 4);
+    ctx.restore();
+
+    const remaining = this.enemies.filter((e) => !e.dead && e.encounterId === enc.id).length;
+    const pips = Math.min(8, remaining);
+    for (let i = 0; i < pips; i++) {
+      ctx.fillStyle = 'rgba(255, 138, 61, 0.9)';
+      ctx.fillRect(x - pips * 2 + i * 4, top - 26, 2, 4);
+    }
+  }
+
+  // 检查点信标：未激活为青色脉冲，使用后转绿色常亮
+  drawCheckpoints(ctx) {
+    if (!this.level || !this.level.checkpoints) return;
+    const ground = GameConfig.GROUND_Y;
+    const t = this.currentTime;
+    for (const cp of this.level.checkpoints) {
+      if (!this.isVisible(cp.x - 12, 24)) continue;
+      const x = Math.round(cp.x);
+      const pulse = 0.5 + 0.5 * Math.sin(t / 260);
+      const col = cp.used ? '57, 255, 136' : '0, 229, 255';
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = `rgba(${col}, ${cp.used ? 0.18 : 0.10 + pulse * 0.08})`;
+      ctx.fillRect(x - 12, ground - 2, 24, 2);
+      ctx.restore();
+
+      // 底座
+      ctx.fillStyle = '#0a0d12';
+      ctx.fillRect(x - 6, ground - 5, 12, 5);
+      ctx.fillStyle = '#2a3444';
+      ctx.fillRect(x - 5, ground - 4, 10, 3);
+      ctx.fillStyle = `rgba(${col}, 0.9)`;
+      ctx.fillRect(x - 4, ground - 4, 8, 1);
+
+      // 立杆 + 信标
+      ctx.fillStyle = '#141b24';
+      ctx.fillRect(x - 1, ground - 22, 2, 17);
+      ctx.fillStyle = '#3a4658';
+      ctx.fillRect(x, ground - 21, 1, 15);
+
+      const glow = cp.used ? 0.35 : 0.55 + pulse * 0.45;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = `rgba(${col}, ${0.22 * glow})`;
+      ctx.fillRect(x - 6, ground - 34, 12, 12);
+      ctx.fillStyle = `rgba(${col}, ${0.9 * glow})`;
+      ctx.fillRect(x - 2, ground - 30, 4, 4);
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.8 * glow})`;
+      ctx.fillRect(x - 1, ground - 29, 2, 2);
+
+      if (!cp.used) {
+        const g = ctx.createLinearGradient(0, ground - 70, 0, ground - 22);
+        g.addColorStop(0, 'rgba(0, 229, 255, 0)');
+        g.addColorStop(1, `rgba(0, 229, 255, ${0.12 + pulse * 0.08})`);
+        ctx.fillStyle = g;
+        ctx.fillRect(x - 2, ground - 70, 4, 48);
+      }
+      ctx.restore();
+    }
+  }
+
+  // 蒸汽口：地面格栅 + 预警闪烁 + 喷发气团
+  drawHazards(ctx) {
+    if (!this.level || !this.level.hazards) return;
+    const ground = GameConfig.GROUND_Y;
+    const t = this.currentTime;
+    for (let i = 0; i < this.level.hazards.length; i++) {
+      const h = this.level.hazards[i];
+      if (!this.isVisible(h.x, h.w)) continue;
+      const x = Math.round(h.x);
+      const w = Math.round(h.w);
+      const phase = this.hazardPhase(i, t);
+      const warning = phase >= 0.38 && phase < 0.5;
+      const active = phase >= 0.5 && phase < 0.72;
+
+      // 地面格栅
+      ctx.fillStyle = '#080b10';
+      ctx.fillRect(x - 2, ground - 6, w + 4, 6);
+      ctx.fillStyle = '#2a3444';
+      ctx.fillRect(x - 1, ground - 5, w + 2, 3);
+      ctx.fillStyle = '#0e141c';
+      for (let sx = x; sx < x + w; sx += 4) ctx.fillRect(sx, ground - 5, 2, 3);
+
+      // 警示灯
+      const blink = 0.5 + 0.5 * Math.sin(t / (warning ? 55 : 140));
+      ctx.fillStyle = active
+        ? '#ff8a3d'
+        : (warning ? `rgba(255, 138, 61, ${0.35 + blink * 0.6})` : '#5a2a16');
+      ctx.fillRect(x + 2, ground - 8, 3, 2);
+      ctx.fillRect(x + w - 5, ground - 8, 3, 2);
+
+      if (!warning && !active) continue;
+
+      // 蒸汽气团
+      const power = active ? 1 : 0.35;
+      const puffs = active ? 9 : 4;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (let j = 0; j < puffs; j++) {
+        const life = ((t * 0.0011 + j / puffs + i * 0.17) % 1);
+        const px = x + w / 2 + Math.sin(j * 2.7 + t * 0.0035) * (w * 0.34) * life;
+        const py = ground - 6 - life * (active ? 46 : 16);
+        const size = 3 + life * (active ? 7 : 3);
+        const alpha = (1 - life) * power * 0.42;
+        ctx.fillStyle = `rgba(205, 232, 245, ${alpha})`;
+        ctx.fillRect(
+          Math.round(px - size / 2), Math.round(py - size / 2),
+          Math.round(size), Math.round(size),
+        );
+        if (active && j % 2 === 0) {
+          ctx.fillStyle = `rgba(255, 220, 190, ${alpha * 0.5})`;
+          ctx.fillRect(Math.round(px), Math.round(py), 1, 1);
+        }
       }
       ctx.restore();
     }

@@ -23,6 +23,8 @@ function normalizeCovers(covers, posScale) {
       hp: c.hp,
       destructible: c.destructible,
       type,
+      loot: c.loot || null,
+      secret: !!c.secret,
     };
   });
 }
@@ -82,6 +84,26 @@ export async function loadLevels() {
 
 // 将 960x540 基准的关卡数据缩放到 480x270 逻辑空间
 function scaleLevel(d) {
+  // 隐藏补给作为可破坏掩体参与物理与绘制，击碎后掉落对应拾取物
+  const secretCovers = (d.secrets || []).map((s) => ({
+    x: s.x,
+    y: s.y,
+    w: 0,
+    h: 0,
+    hp: s.hp || 8,
+    destructible: true,
+    type: s.type || 'vending',
+    loot: s.loot || 'ammo',
+    secret: true,
+  }));
+
+  // 新关卡用 encounters 描述波次；老数据只有 enemies 时退化为开场全量刷怪
+  const rawEncounters = (d.encounters && d.encounters.length)
+    ? d.encounters
+    : ((d.enemies || []).length
+      ? [{ id: 'legacy', label: '', triggerX: 0, gateX: null, spawns: d.enemies }]
+      : []);
+
   return {
     id: d.id,
     name: d.name,
@@ -91,10 +113,22 @@ function scaleLevel(d) {
       x: Math.round(p.x * SCALE), y: Math.round(p.y * SCALE),
       w: Math.round(p.w * SCALE), h: Math.round(p.h * SCALE),
     })),
-    covers: normalizeCovers(d.covers, SCALE),
-    enemies: (d.enemies || []).map(e => ({
-      x: Math.round(e.x * SCALE),
-      y: e.y != null ? Math.round(e.y * SCALE) : undefined,
+    covers: normalizeCovers([...(d.covers || []), ...secretCovers], SCALE),
+    encounters: rawEncounters.map((enc, i) => ({
+      id: enc.id || `enc-${i}`,
+      label: enc.label || '',
+      triggerX: Math.round((enc.triggerX ?? 0) * SCALE),
+      gateX: enc.gateX != null ? Math.round(enc.gateX * SCALE) : null,
+      spawns: (enc.spawns || []).map(e => ({
+        x: Math.round(e.x * SCALE),
+        y: e.y != null ? Math.round(e.y * SCALE) : undefined,
+      })),
+    })),
+    checkpoints: (d.checkpoints || []).map(c => ({ x: Math.round(c.x * SCALE) })),
+    hazards: (d.hazards || []).map(h => ({
+      x: Math.round(h.x * SCALE),
+      w: Math.round((h.w || 74) * SCALE),
+      type: h.type || 'steam',
     })),
     boss: d.boss ? {
       x: Math.round(d.boss.x * SCALE),
@@ -116,12 +150,34 @@ export class Level {
     }));
 
     this.covers = normalizeCovers(data.covers, 1).map(
-      (c) => new Cover(c.x, c.y, c.w, c.h, c.hp, c.destructible, c.type),
+      (c) => new Cover(c.x, c.y, c.w, c.h, c.hp, c.destructible, c.type, c.loot, c.secret),
     );
 
-    this.enemySpawns = (data.enemies || []).map((e) => ({
-      x: e.x,
-      y: e.y != null ? e.y : GameConfig.GROUND_Y,
+    // 分区遭遇：玩家进入 triggerX 后刷出该波敌人，清空后 gateX 放行
+    // 兼容旧数据：只有 enemies 时退化为开局一波，不设闸门
+    const rawEncounters = (data.encounters && data.encounters.length)
+      ? data.encounters
+      : ((data.enemies && data.enemies.length)
+        ? [{ id: 'legacy', label: '', triggerX: 0, gateX: null, spawns: data.enemies }]
+        : []);
+    this.encounters = rawEncounters.map((enc) => ({
+      ...enc,
+      spawns: (enc.spawns || []).map((e) => ({
+        x: e.x,
+        y: e.y != null ? e.y : GameConfig.GROUND_Y,
+      })),
+    }));
+    this.totalEnemies = this.encounters.reduce(
+      (n, enc) => n + (enc.spawns || []).length, 0,
+    );
+
+    // 中途补给与场景机关
+    this.checkpoints = (data.checkpoints || []).map((c) => ({ x: c.x, used: false }));
+    this.hazards = (data.hazards || []).map((h) => ({
+      x: h.x,
+      w: h.w || 37,
+      type: h.type || 'steam',
+      wasActive: false,
     }));
 
     this.boss = data.boss ? {
