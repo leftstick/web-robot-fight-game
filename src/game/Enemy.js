@@ -703,8 +703,18 @@ export class Boss extends EnemyBase {
     this.controlLocked = false;
     this.lastUpdateTime = 0;
 
-    this.burstLeft = 0;
+    // 点射状态机：idle -> telegraph(亮弹道) -> firing(按锁定方向连发)
+    this.aimState = 'idle';
+    this.aimUntil = 0;
+    this.nextAimAt = 0;
+    this.aimLow = true;        // 首次 beginAim 切换为胸口平射
+    this.aimDirX = 1;
+    this.aimDirY = 0;
+    this.aimBurstLeft = 0;
     this.nextBurstAt = 0;
+    this.aimInit = false;
+    this.pendingAimSfx = false;
+
     // 冲撞攻击状态
     this.chargeState = 'idle';   // idle | windup | charging | recover
     this.chargeEnd = 0;
@@ -778,7 +788,9 @@ export class Boss extends EnemyBase {
       return;
     }
     this.vx = 0;
-    this.burstLeft = 0;
+    this.aimState = 'idle';
+    this.aimBurstLeft = 0;
+    this.nextAimAt = t + cfg.phaseInvuln + 400;
     this.chargeState = 'idle';
     this.slamState = 'idle';
   }
@@ -827,6 +839,41 @@ export class Boss extends EnemyBase {
     const pcx = player.x + player.width / 2;
     const mycx = this.getCenterX();
     const dist = Math.abs(pcx - mycx);
+
+    if (!this.aimInit) {
+      this.aimInit = true;
+      this.nextAimAt = t + 600;
+    }
+
+    // —— 点射：先亮弹道，再按锁定方向连发 ——
+    if (this.aimState === 'telegraph') {
+      this.vx = 0;
+      this.animTime += dtf;
+      this.phys(dtf, world);
+      if (t >= this.aimUntil) {
+        this.aimState = 'firing';
+        this.aimBurstLeft = cfg.aimBurst[this.phase - 1];
+        this.nextBurstAt = t;
+      }
+      return null;
+    }
+
+    if (this.aimState === 'firing') {
+      this.vx = 0;
+      this.animTime += dtf;
+      this.phys(dtf, world);
+      if (this.aimBurstLeft > 0 && t >= this.nextBurstAt) {
+        this.aimBurstLeft--;
+        this.nextBurstAt = t + cfg.aimBurstGap;
+        return this.fireLockedShot();
+      }
+      if (this.aimBurstLeft <= 0) {
+        this.aimState = 'idle';
+        this.lastShot = t;
+        this.nextAimAt = t + cfg.aimCooldown[this.phase - 1];
+      }
+      return null;
+    }
 
     // —— 震地：蓄力结束的同一帧交给 Game 生成左右冲击波 ——
     if (this.slamState === 'windup') {
@@ -910,26 +957,6 @@ export class Boss extends EnemyBase {
     this.animTime += dtf;
     this.phys(dtf, world);
 
-    // 点射：阶段越高，连发间隔越短
-    const burstGap = this.phase >= 3 ? 95 : (this.phase >= 2 ? 115 : 130);
-    const fireGap = this.phase >= 3 ? 480 : (this.phase >= 2 ? 620 : cfg.fireInterval);
-    if (this.burstLeft > 0) {
-      if (t >= this.nextBurstAt) {
-        this.burstLeft--;
-        this.nextBurstAt = t + burstGap;
-        return this.tryShoot(t, player, true);
-      }
-      return null;
-    }
-
-    if (t - this.lastShot > fireGap) {
-      const maxBurst = this.phase >= 3 ? 6 : (this.phase >= 2 ? 5 : 4);
-      this.burstLeft = 3 + Math.floor(Math.random() * (maxBurst - 2));
-      this.nextBurstAt = t + burstGap;
-      this.burstLeft--;
-      return this.tryShoot(t, player, true);
-    }
-
     // 二阶段开始：近身时先震地，逼玩家跳起来
     if (this.phase >= 2 && t > this.nextSlamAt && dist < cfg.nearRange && dist > 34) {
       this.slamState = 'windup';
@@ -943,9 +970,64 @@ export class Boss extends EnemyBase {
       this.chargeState = 'windup';
       this.chargeEnd = t + (this.phase >= 3 ? 360 : 450);
       this.vx = 0;
+      return null;
+    }
+
+    // 远程点射：摇枪预警，弹道在预警瞬间锁定，之后不再追踪玩家
+    if (t >= this.nextAimAt) {
+      this.beginAim(t, player);
     }
 
     return null;
+  }
+
+  // 锁定一条弹道：红色平射（蹲下躲）与橙色压地（起跳躲）交替
+  beginAim(t, player) {
+    const cfg = GameConfig.BOSS;
+    const muzzle = this.getMuzzle();
+    this.aimState = 'telegraph';
+    this.aimUntil = t + cfg.aimWindup[this.phase - 1];
+    this.aimLow = !this.aimLow;
+    this.vx = 0;
+
+    let dx = (player.x + player.width / 2) - muzzle.x;
+    if (Math.sign(dx) !== this.facing) dx = this.facing * 220;
+    const targetY = this.aimLow ? GameConfig.GROUND_Y : muzzle.y;
+    const dy = targetY - muzzle.y;
+    const len = Math.max(1, Math.hypot(dx, dy));
+    this.aimDirX = dx / len;
+    this.aimDirY = dy / len;
+
+    this.shootAnimUntil = this.aimUntil + 240;
+    this.pendingAimSfx = true;
+  }
+
+  consumeAimSfx() {
+    if (!this.pendingAimSfx) return false;
+    this.pendingAimSfx = false;
+    return true;
+  }
+
+  fireLockedShot() {
+    const cfg = GameConfig.BOSS;
+    const muzzle = this.getMuzzle();
+    const eb = GameConfig.ENEMY_BULLET;
+    const low = this.aimLow;
+    this.shootAnimUntil = Math.max(this.shootAnimUntil, this.nextBurstAt + 120);
+    return new Bullet(
+      muzzle.x + (this.aimDirX < 0 ? -eb.width : 0),
+      muzzle.y - eb.height / 2,
+      this.aimDirX * cfg.bulletSpeed,
+      this.aimDirY * cfg.bulletSpeed,
+      {
+        width: eb.width,
+        height: eb.height,
+        damage: cfg.bulletDamage,
+        color: low ? '#ffa23d' : '#ff5a5a',
+        owner: BulletOwner.ENEMY,
+        sfx: 'bossShoot',
+      },
+    );
   }
 
   // 三阶段环形弹幕：10 发放射状能量球
@@ -988,6 +1070,53 @@ export class Boss extends EnemyBase {
     if (this.dead) return;
 
     const c = this.corePoint;
+
+    // 点射预警：枪口充能 + 锁定弹道。红色平射蹲下躲，橙色压地起跳躲。
+    if (this.aimState === 'telegraph') {
+      const muzzle = this.getMuzzle();
+      const pulse = 0.5 + 0.5 * Math.sin(t / 45);
+      const rgb = this.aimLow ? '255, 162, 61' : '255, 90, 90';
+      const len = 760;
+      const ex = muzzle.x + this.aimDirX * len;
+      const ey = muzzle.y + this.aimDirY * len;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+
+      const r = 8 + pulse * 7;
+      const glow = ctx.createRadialGradient(muzzle.x, muzzle.y, 1, muzzle.x, muzzle.y, r * 2.2);
+      glow.addColorStop(0, 'rgba(255,255,255,0.9)');
+      glow.addColorStop(0.35, `rgba(${rgb}, ${0.55 + pulse * 0.3})`);
+      glow.addColorStop(1, `rgba(${rgb}, 0)`);
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(muzzle.x, muzzle.y, r * 2.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 外发光层 + 实线层：保证在亮平台和夜空背景上都看得见
+      ctx.strokeStyle = `rgba(${rgb}, ${0.14 + pulse * 0.12})`;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(muzzle.x, muzzle.y);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+
+      ctx.strokeStyle = `rgba(${rgb}, ${0.5 + pulse * 0.3})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(muzzle.x, muzzle.y);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+
+      const step = 24;
+      const travel = (t * 0.12) % step;
+      ctx.fillStyle = `rgba(${rgb}, ${0.65 + pulse * 0.3})`;
+      for (let d = travel; d < 320; d += step) {
+        const px = muzzle.x + this.aimDirX * d;
+        const py = muzzle.y + this.aimDirY * d;
+        ctx.fillRect(Math.round(px), Math.round(py), 3, 2);
+      }
+      ctx.restore();
+    }
 
     // 三阶段核心：脉动光环 + 十字准星，提示这里吃双倍伤害
     if (this.coreOpen) {

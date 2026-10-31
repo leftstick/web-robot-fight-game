@@ -723,8 +723,9 @@ export class Game {
       }
       if (e.hitFlash > 0) e.hitFlash -= this.deltaTime;
 
-      // Boss 震地 / 二阶段召唤
+      // Boss 震地 / 二阶段召唤 / 点射预警
       if (e === this.boss) {
+        if (e.consumeAimSfx && e.consumeAimSfx()) this.sfx.bossAim();
         if (e.consumeShockwave && e.consumeShockwave()) this.triggerBossShockwave(e);
         const summonCount = e.consumeSummon ? e.consumeSummon() : 0;
         if (summonCount > 0) this.summonBossAdds(summonCount);
@@ -901,6 +902,7 @@ export class Game {
       if (this.currentTime >= this.bossIntroUntil) {
         this.cinematic = null;
         if (this.boss) this.boss.controlLocked = false;
+        this.showPickupToast('红色弹道按 S 蹲下 · 橙色弹道按 W 起跳', '#ffe066');
         if (this.onBossIntroEnd) this.onBossIntroEnd();
       }
     }
@@ -1151,9 +1153,9 @@ export class Game {
     this.boss.controlLocked = true;
     this.enemies.push(this.boss);
 
-    // 场地补给：血量与弹药，避免长血条战斗打到弹尽
+    // 场地补给：血量 + 保底步枪，避免只有手枪时打长血条
     this.spawnPickup('health', x1 + 140, GameConfig.GROUND_Y);
-    this.spawnPickup('ammo', x1 + 330, GameConfig.GROUND_Y);
+    this.spawnPickup('rifle', x1 + 330, GameConfig.GROUND_Y);
 
     // 入场演出：锁输入 1.8 秒，镜头拉进竞技场
     this.cinematic = 'bossIntro';

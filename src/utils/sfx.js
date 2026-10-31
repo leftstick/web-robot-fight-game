@@ -154,6 +154,17 @@ export class Sfx {
     this._noise({ dur: 0.4, vol: 0.24, cutoff: 1800 });
   }
 
+  // BOSS 点射预警：上扬充能音
+  bossAim() {
+    this._tone({ freq: 240, slideTo: 620, type: 'square', dur: 0.22, vol: 0.09 });
+  }
+
+  // BOSS 重弹：低频、带一点噪声，区别于杂兵枪声
+  bossShoot() {
+    this._tone({ freq: 300, slideTo: 80, type: 'sawtooth', dur: 0.12, vol: 0.14 });
+    this._noise({ dur: 0.08, vol: 0.08, cutoff: 2400 });
+  }
+
   // 遭遇闸门：机械锁扣 + 短促电流
   gate() {
     this._tone({ freq: 180, slideTo: 90, type: 'square', dur: 0.18, vol: 0.16 });

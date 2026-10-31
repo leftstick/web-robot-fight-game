@@ -111,8 +111,13 @@ export const GameConfig = {
     hp: 120,
     score: 5000,
     fireInterval: 850,
-    bulletSpeed: 3.75,
+    bulletSpeed: 3.2,        // 慢到能看清、躲开
     bulletDamage: 2,
+    // 点射预警与节奏：先亮弹道，再按锁定方向连发
+    aimWindup: [650, 520, 440],   // 前摇(ms)，按阶段
+    aimBurst: [3, 3, 4],          // 每轮弹数
+    aimBurstGap: 110,             // 连发间隔(ms)
+    aimCooldown: [1300, 1100, 950], // 一轮结束后的输出窗口(ms)
     // 三阶段：66% 进入暴走，33% 核心暴露
     phaseThresholds: [0.66, 0.33],
     phaseInvuln: 1000,       // 阶段切换无敌时长(ms)
