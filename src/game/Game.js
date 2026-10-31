@@ -1,6 +1,6 @@
 import { GameConfig } from '../config/gameConfig.js';
 import { Player } from './Player.js';
-import { Thug, Boss, createEnemy } from './Enemy.js';
+import { Boss, createEnemy } from './Enemy.js';
 import { ParticleSystem } from './Particle.js';
 import { EffectSystem } from './Effects.js';
 import { SceneRenderer } from './SceneRenderer.js';
@@ -448,22 +448,41 @@ export class Game {
     this.sfx.gate();
   }
 
-  // —— 蒸汽口：周期性预警 → 喷发，站上去会掉血 ——
-  hazardPhase(index, t) {
-    return ((t + index * 900) % 4200) / 4200;
+  // —— 场景机关：蒸汽/轨道按地面周期喷发，吊机垂直砸落，激光横向扫线 ——
+  hazardPhase(index, t, type = 'steam') {
+    const period = type === 'crane' ? 3800 : type === 'laser' ? 3000 : 4200;
+    return ((t + index * 900) % period) / period;
   }
 
   updateHazards() {
     if (!this.level || !this.level.hazards) return;
     const p = this.player;
+    const ground = GameConfig.GROUND_Y;
     for (let i = 0; i < this.level.hazards.length; i++) {
       const h = this.level.hazards[i];
-      const phase = this.hazardPhase(i, this.currentTime);
-      const active = phase >= 0.5 && phase < 0.72;
-      if (active && !h.wasActive) this.sfx.steam();
+      const phase = this.hazardPhase(i, this.currentTime, h.type);
+      let active;
+      let rect = null;
 
-      if (active && !p.isInvincibleNow(this.currentTime)) {
-        const rect = { x: h.x, y: GameConfig.GROUND_Y - 26, width: h.w, height: 26 };
+      if (h.type === 'crane') {
+        active = phase >= 0.58 && phase < 0.70;
+        if (active && !h.wasActive) this.sfx.crane();
+        rect = { x: h.x + h.w / 2 - 12, y: ground - 62, width: 24, height: 62 };
+      } else if (h.type === 'laser') {
+        active = phase >= 0.45 && phase < 0.62;
+        if (active && !h.wasActive) this.sfx.laser();
+        const beamY = h.beam === 'low' ? ground - 16 : ground - 46;
+        rect = { x: h.x, y: beamY, width: h.w, height: 4 };
+      } else {
+        active = phase >= 0.5 && phase < 0.72;
+        if (active && !h.wasActive) {
+          if (h.type === 'rail') this.sfx.rail();
+          else this.sfx.steam();
+        }
+        rect = { x: h.x, y: ground - 26, width: h.w, height: 26 };
+      }
+
+      if (active && rect && !p.isInvincibleNow(this.currentTime)) {
         if (aabb(rect, p.getBounds())) {
           this.damagePlayer();
           this.addScreenShake(6, 4);
@@ -664,6 +683,8 @@ export class Game {
 
   // 掩体破碎统一入口：特效 + 释放掩体占用 + 隐藏补给掉落
   destroyCover(cover) {
+    if (cover.destroyed) return;
+    cover.destroyed = true;
     const cc = cover.getCenter();
     this.effectSystem.explosion(cc.x, cc.y);
     this.particleSystem.createExplosion(cc.x, cc.y, '#ffb347', 10);
@@ -678,6 +699,48 @@ export class Game {
         this.showPickupToast('发现隐藏补给', '#ffe066');
         this.sfx.pickup();
       }
+    }
+
+    if (cover.explosive) this.detonateCover(cover);
+  }
+
+  // 油桶殉爆：范围伤害 + 连锁引爆附近的油桶。
+  // 对敌我同时生效，所以近距离打桶会把自己也炸到。
+  detonateCover(cover) {
+    const c = cover.getCenter();
+    const radius = 82;
+    this.effectSystem.explosion(c.x, c.y - 6);
+    this.particleSystem.createExplosion(c.x, c.y - 6, '#ffb347', 28);
+    this.particleSystem.createExplosion(c.x, c.y - 10, '#ff5a3d', 18);
+    this.addScreenShake(20, 11);
+    this.addHitStop(70);
+    this.sfx.explosion();
+
+    const p = this.player;
+    if (!p.isInvincibleNow(this.currentTime)) {
+      const pc = { x: p.x + p.width / 2, y: p.y + p.height / 2 };
+      if (Math.hypot(pc.x - c.x, pc.y - c.y) < radius) {
+        this.damagePlayer();
+        this.addScreenShake(12, 7);
+      }
+    }
+
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const ex = e.x + e.width / 2;
+      const ey = e.y + e.height / 2;
+      if (Math.hypot(ex - c.x, ey - c.y) > radius + e.width * 0.5) continue;
+      this.particleSystem.createHitEffect(ex, ey, '#ffb347');
+      if (e.takeDamage(4)) this.killEnemy(e);
+    }
+
+    for (const cov of this.level.covers) {
+      if (cov === cover || cov.hp <= 0 || cov.destroyed) continue;
+      const cc = cov.getCenter();
+      if (Math.hypot(cc.x - c.x, cc.y - c.y) > radius * 0.9) continue;
+      // 相邻油桶直接殉爆，其他掩体只吃固定伤害
+      const dmg = cov.explosive ? 999 : 6;
+      if (cov.takeDamage(dmg)) this.destroyCover(cov);
     }
   }
 
@@ -729,7 +792,7 @@ export class Game {
         if (e.consumeAimSfx && e.consumeAimSfx()) this.sfx.bossAim();
         if (e.consumeShockwave && e.consumeShockwave()) this.triggerBossShockwave(e);
         const summonCount = e.consumeSummon ? e.consumeSummon() : 0;
-        if (summonCount > 0) this.summonBossAdds(summonCount);
+        if (summonCount > 0) this.summonBossAdds(summonCount, e.summonType || 'thug');
       }
 
       // Boss 冲撞接触伤害
@@ -789,16 +852,19 @@ export class Game {
     }
   }
 
-  summonBossAdds(count) {
+  summonBossAdds(count, type = 'thug') {
     if (!this.bossArena) return;
     const arena = this.bossArena;
     const spots = [arena.x1 + 48, arena.x2 - 48, arena.x1 + 120, arena.x2 - 120];
+    // 只统计存活敌人：死亡但还在播放碎片的敌人不应占增援名额
+    let alive = this.enemies.filter((e) => !e.dead).length;
     for (let i = 0; i < count; i++) {
-      if (this.enemies.length > 8) break;
+      if (alive > 8) break;
       const x = spots[i % spots.length];
-      const thug = new Thug(x, GameConfig.GROUND_Y);
-      thug.awake = true;
-      this.enemies.push(thug);
+      const add = createEnemy(type, x, GameConfig.GROUND_Y);
+      add.awake = true;
+      this.enemies.push(add);
+      alive++;
       this.effectSystem.explosion(x, GameConfig.GROUND_Y - 18);
       this.particleSystem.createExplosion(x, GameConfig.GROUND_Y - 18, '#ff2e88', 10);
     }
@@ -1002,8 +1068,8 @@ export class Game {
     return 'health';
   }
 
-  spawnPickup(type, centerX, bottomY) {
-    if (this.pickups.length >= GameConfig.LOOT.maxPickups) return null;
+  spawnPickup(type, centerX, bottomY, force = false) {
+    if (!force && this.pickups.length >= GameConfig.LOOT.maxPickups) return null;
     const pickup = new Pickup(type, centerX, bottomY, this.currentTime);
     this.pickups.push(pickup);
     return pickup;
@@ -1152,15 +1218,20 @@ export class Game {
       this.level.boss.x,
       GameConfig.GROUND_Y,
       this.level.boss.hp,
-      { name: this.level.boss.name, title: this.level.boss.title },
+      {
+        name: this.level.boss.name,
+        title: this.level.boss.title,
+        profile: GameConfig.BOSS_PROFILES?.[this.level.id] || null,
+      },
     );
     this.boss.awake = true;
     this.boss.controlLocked = true;
     this.enemies.push(this.boss);
 
-    // 场地补给：血量 + 保底步枪，避免只有手枪时打长血条
-    this.spawnPickup('health', x1 + 140, GameConfig.GROUND_Y);
-    this.spawnPickup('rifle', x1 + 330, GameConfig.GROUND_Y);
+    // 场地补给：血量 + 保底步枪，避免只有手枪时打长血条。
+    // 强制生成，不受场上掉落物数量上限影响。
+    this.spawnPickup('health', x1 + 140, GameConfig.GROUND_Y, true);
+    this.spawnPickup('rifle', x1 + 330, GameConfig.GROUND_Y, true);
 
     // 入场演出：锁输入 1.8 秒，镜头拉进竞技场
     this.cinematic = 'bossIntro';
@@ -1479,7 +1550,7 @@ export class Game {
     }
   }
 
-  // 蒸汽口：地面格栅 + 预警闪烁 + 喷发气团
+  // 场景机关：蒸汽口 / 轨道电击 / 吊机重锤 / 激光绊线
   drawHazards(ctx) {
     if (!this.level || !this.level.hazards) return;
     const ground = GameConfig.GROUND_Y;
@@ -1489,27 +1560,98 @@ export class Game {
       if (!this.isVisible(h.x, h.w)) continue;
       const x = Math.round(h.x);
       const w = Math.round(h.w);
-      const phase = this.hazardPhase(i, t);
-      const warning = phase >= 0.38 && phase < 0.5;
-      const active = phase >= 0.5 && phase < 0.72;
+      const phase = this.hazardPhase(i, t, h.type);
 
-      // 地面格栅
-      ctx.fillStyle = '#080b10';
-      ctx.fillRect(x - 2, ground - 6, w + 4, 6);
-      ctx.fillStyle = '#2a3444';
-      ctx.fillRect(x - 1, ground - 5, w + 2, 3);
-      ctx.fillStyle = '#0e141c';
-      for (let sx = x; sx < x + w; sx += 4) ctx.fillRect(sx, ground - 5, 2, 3);
+      let warning;
+      let active;
+      if (h.type === 'crane') {
+        warning = phase >= 0.42 && phase < 0.58;
+        active = phase >= 0.58 && phase < 0.70;
+      } else if (h.type === 'laser') {
+        warning = phase >= 0.32 && phase < 0.45;
+        active = phase >= 0.45 && phase < 0.62;
+      } else {
+        warning = phase >= 0.38 && phase < 0.5;
+        active = phase >= 0.5 && phase < 0.72;
+      }
+
+      if (h.type === 'crane') {
+        this.drawCraneHazard(ctx, x, w, ground, phase, warning, active, t);
+        continue;
+      }
+      if (h.type === 'laser') {
+        this.drawLaserHazard(ctx, h, x, w, ground, warning, active, t);
+        continue;
+      }
+
+      const isRail = h.type === 'rail';
+
+      if (isRail) {
+        // 悬轨电击：两条钢轨 + 枕木，喷发时轨间拉起电弧
+        ctx.fillStyle = '#080b10';
+        ctx.fillRect(x - 2, ground - 7, w + 4, 7);
+        ctx.fillStyle = '#3a4658';
+        ctx.fillRect(x - 2, ground - 6, w + 4, 2);
+        ctx.fillStyle = '#1a2330';
+        for (let sx = x - 2; sx < x + w + 2; sx += 6) {
+          ctx.fillRect(sx, ground - 4, 3, 2);
+        }
+        ctx.fillStyle = '#4d5c70';
+        ctx.fillRect(x - 2, ground - 2, w + 4, 1);
+      } else {
+        // 地面格栅
+        ctx.fillStyle = '#080b10';
+        ctx.fillRect(x - 2, ground - 6, w + 4, 6);
+        ctx.fillStyle = '#2a3444';
+        ctx.fillRect(x - 1, ground - 5, w + 2, 3);
+        ctx.fillStyle = '#0e141c';
+        for (let sx = x; sx < x + w; sx += 4) ctx.fillRect(sx, ground - 5, 2, 3);
+      }
 
       // 警示灯
       const blink = 0.5 + 0.5 * Math.sin(t / (warning ? 55 : 140));
-      ctx.fillStyle = active
-        ? '#ff8a3d'
-        : (warning ? `rgba(255, 138, 61, ${0.35 + blink * 0.6})` : '#5a2a16');
+      const lampOn = isRail ? '#7ff6ff' : '#ff8a3d';
+      const lampOff = isRail ? '#19434d' : '#5a2a16';
+      const lampWarn = isRail
+        ? `rgba(127, 246, 255, ${0.35 + blink * 0.6})`
+        : `rgba(255, 138, 61, ${0.35 + blink * 0.6})`;
+      ctx.fillStyle = active ? lampOn : (warning ? lampWarn : lampOff);
       ctx.fillRect(x + 2, ground - 8, 3, 2);
       ctx.fillRect(x + w - 5, ground - 8, 3, 2);
 
       if (!warning && !active) continue;
+
+      if (isRail) {
+        // 电弧：两条竖向抖动电流 + 火花颗粒
+        const power = active ? 1 : 0.4;
+        const height = active ? 54 : 20;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (let b = 0; b < 2; b++) {
+          const bx = x + w * (0.3 + b * 0.4);
+          const segs = 7;
+          ctx.strokeStyle = `rgba(120, 240, 255, ${0.35 + power * 0.45})`;
+          ctx.lineWidth = active ? 1.6 : 1;
+          ctx.beginPath();
+          ctx.moveTo(Math.round(bx), ground - 4);
+          for (let s = 1; s <= segs; s++) {
+            const p = s / segs;
+            const jitter = Math.sin(t * 0.02 + b * 7 + s * 2.3) * (3 + power * 4);
+            ctx.lineTo(Math.round(bx + jitter), Math.round(ground - 4 - p * height));
+          }
+          ctx.stroke();
+        }
+        const sparks = active ? 8 : 3;
+        for (let j = 0; j < sparks; j++) {
+          const life = ((t * 0.0022 + j / sparks + i * 0.23) % 1);
+          const px = x + w * (0.2 + ((j * 37) % 60) / 100) + Math.sin(j + t * 0.01) * 4;
+          const py = ground - 6 - life * height * 0.9;
+          ctx.fillStyle = `rgba(210, 252, 255, ${(1 - life) * power * 0.8})`;
+          ctx.fillRect(Math.round(px), Math.round(py), 1, 2);
+        }
+        ctx.restore();
+        continue;
+      }
 
       // 蒸汽气团
       const power = active ? 1 : 0.35;
@@ -1534,6 +1676,133 @@ export class Game {
       }
       ctx.restore();
     }
+  }
+
+  // 吊机重锤：钢缆 + 吊钩下落，落点有黄黑危险条与火花
+  drawCraneHazard(ctx, x, w, ground, phase, warning, active, t) {
+    const cx = Math.round(x + w / 2);
+    const blink = 0.5 + 0.5 * Math.sin(t / (warning ? 55 : 150));
+    const danger = warning || active;
+
+    // 地面落点
+    ctx.fillStyle = '#0a0d12';
+    ctx.fillRect(x, ground - 3, w, 3);
+    for (let sx = x; sx < x + w; sx += 8) {
+      ctx.fillStyle = danger
+        ? `rgba(255, 178, 60, ${0.35 + blink * 0.45})`
+        : 'rgba(70, 60, 40, 0.5)';
+      ctx.fillRect(sx, ground - 3, 4, 3);
+    }
+
+    // 吊钩高度：高位待机 → 预警下落 → 砸地 → 回收
+    let hookY;
+    if (phase < 0.42) {
+      hookY = ground - 150;
+    } else if (phase < 0.58) {
+      const p = (phase - 0.42) / 0.16;
+      hookY = ground - 150 + p * 128;
+    } else if (phase < 0.70) {
+      hookY = ground - 22;
+    } else if (phase < 0.88) {
+      const p = (phase - 0.70) / 0.18;
+      hookY = ground - 22 - p * 128;
+    } else {
+      hookY = ground - 150;
+    }
+    hookY = Math.round(hookY);
+
+    // 钢缆从画面顶端垂下
+    ctx.strokeStyle = '#1a2230';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, -40);
+    ctx.lineTo(cx, hookY - 6);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(120, 140, 160, 0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - 1, -40);
+    ctx.lineTo(cx - 1, hookY - 6);
+    ctx.stroke();
+
+    // 吊钩本体
+    ctx.fillStyle = '#2b3442';
+    ctx.fillRect(cx - 7, hookY - 6, 14, 8);
+    ctx.fillStyle = '#46566a';
+    ctx.fillRect(cx - 7, hookY - 6, 14, 2);
+    ctx.fillStyle = '#121820';
+    ctx.fillRect(cx - 2, hookY + 2, 4, 5);
+    ctx.fillStyle = active
+      ? '#ff5a3d'
+      : (warning ? `rgba(255, 180, 60, ${0.4 + blink * 0.6})` : '#4a3320');
+    ctx.fillRect(cx - 1, hookY - 9, 2, 2);
+
+    if (!active) return;
+    // 砸地火花与尘雾
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const glow = ctx.createRadialGradient(cx, ground - 2, 1, cx, ground - 2, 26);
+    glow.addColorStop(0, 'rgba(255, 230, 170, 0.55)');
+    glow.addColorStop(1, 'rgba(255, 138, 61, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(cx - 26, ground - 28, 52, 28);
+    for (let j = 0; j < 7; j++) {
+      const life = ((t * 0.004 + j / 7) % 1);
+      const dir = j % 2 === 0 ? 1 : -1;
+      const px = cx + dir * life * (12 + (j % 3) * 6);
+      const py = ground - 4 - life * (10 + (j % 4) * 5);
+      ctx.fillStyle = `rgba(255, 210, 130, ${(1 - life) * 0.9})`;
+      ctx.fillRect(Math.round(px), Math.round(py), 1, 2);
+    }
+    ctx.restore();
+  }
+
+  // 激光绊线：两端发射器 + 预警虚线 + 通电实线（高位蹲、低位跳）
+  drawLaserHazard(ctx, h, x, w, ground, warning, active, t) {
+    const high = h.beam !== 'low';
+    const beamY = Math.round(high ? ground - 46 : ground - 16);
+    const blink = 0.5 + 0.5 * Math.sin(t / (warning ? 60 : 150));
+
+    // 两端发射器
+    for (const ex of [x - 4, x + w]) {
+      ctx.fillStyle = '#111820';
+      ctx.fillRect(ex, beamY - 6, 5, 12);
+      ctx.fillStyle = '#3a4658';
+      ctx.fillRect(ex, beamY - 6, 5, 1);
+      ctx.fillStyle = active
+        ? '#ff5a8a'
+        : (warning ? `rgba(255, 90, 138, ${0.35 + blink * 0.55})` : '#3a2030');
+      ctx.fillRect(ex + 1, beamY - 2, 3, 3);
+    }
+
+    if (warning) {
+      // 预警：闪烁虚线，告诉玩家该蹲还是该跳
+      ctx.save();
+      ctx.fillStyle = `rgba(255, 90, 120, ${0.25 + blink * 0.35})`;
+      for (let px = x; px < x + w; px += 7) {
+        ctx.fillRect(px, beamY, 4, 1);
+      }
+      ctx.restore();
+      return;
+    }
+    if (!active) return;
+
+    // 通电：外发光 + 白热芯
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = 'rgba(255, 60, 110, 0.28)';
+    ctx.fillRect(x, beamY - 3, w, 7);
+    ctx.fillStyle = 'rgba(255, 120, 150, 0.75)';
+    ctx.fillRect(x, beamY - 1, w, 3);
+    ctx.fillStyle = 'rgba(255, 240, 245, 0.95)';
+    ctx.fillRect(x, beamY, w, 1);
+    for (let j = 0; j < 4; j++) {
+      const life = ((t * 0.0035 + j / 4) % 1);
+      const px = x + w * life;
+      ctx.fillStyle = `rgba(255, 220, 230, ${(1 - life) * 0.9})`;
+      ctx.fillRect(Math.round(px), beamY - 2 - (j % 3), 1, 1);
+    }
+    ctx.restore();
   }
 
   drawShockwaves(ctx) {
@@ -1829,7 +2098,8 @@ export class Game {
 
       // 阶段分界刻度：66% / 33%
       ctx.fillStyle = 'rgba(8, 6, 12, 0.85)';
-      for (const th of GameConfig.BOSS.phaseThresholds) {
+      const thresholds = this.boss?.cfg?.phaseThresholds || GameConfig.BOSS.phaseThresholds;
+      for (const th of thresholds) {
         ctx.fillRect(bx + Math.round(bw * th), by, 1, bh);
       }
       if (ratio > 0) {

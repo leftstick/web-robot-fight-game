@@ -24,6 +24,11 @@ const NEON_POOLS = {
     { x: 356, y: 190, r: 88, color: '#b14aed', a: 0.08 },
     { x: 500, y: 204, r: 74, color: '#ff8a3d', a: 0.06 },
   ],
+  4: [
+    { x: 96, y: 198, r: 102, color: '#8dff5a', a: 0.10 },
+    { x: 330, y: 192, r: 86, color: '#39e6ff', a: 0.08 },
+    { x: 500, y: 204, r: 72, color: '#ffe066', a: 0.05 },
+  ],
 };
 
 export class SceneRenderer {
@@ -214,8 +219,8 @@ export class SceneRenderer {
   // 贴地小物：只画剪影和 1px 反光，不参与碰撞
   drawStreetProps(ctx, cameraX, level) {
     const cache = this.ensureStreetProps(level);
-    const accent = level.id === 2 ? '#2ee6c8' : (level.id === 3 ? '#ff2e4a' : '#00e5ff');
-    const accent2 = level.id === 2 ? '#ffb347' : (level.id === 3 ? '#b14aed' : '#ff2e88');
+    const accent = level.id === 2 ? '#2ee6c8' : (level.id === 3 ? '#ff2e4a' : (level.id === 4 ? '#8dff5a' : '#00e5ff'));
+    const accent2 = level.id === 2 ? '#ffb347' : (level.id === 3 ? '#b14aed' : (level.id === 4 ? '#39e6ff' : '#ff2e88'));
     const ground = GameConfig.GROUND_Y;
     for (const it of cache.items) {
       if (it.x < cameraX - 30 || it.x > cameraX + this.w + 30) continue;
@@ -338,7 +343,7 @@ export class SceneRenderer {
   // 地面蒸汽：画在角色之后，形成前景层次
   drawSteam(ctx, cameraX, level) {
     const cache = this.ensureStreetProps(level);
-    const tint = level.id === 2 ? '130,240,220' : (level.id === 3 ? '255,150,150' : '165,205,235');
+    const tint = level.id === 2 ? '130,240,220' : (level.id === 3 ? '255,150,150' : (level.id === 4 ? '160,235,140' : '165,205,235'));
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     for (const vent of cache.vents) {
@@ -375,9 +380,10 @@ export class SceneRenderer {
       const phase = (this.time / (480 + i * 17) + i * 0.37) % 1;
       if (phase > 0.32) continue;
       const a = (1 - phase / 0.32) * 0.30;
-      ctx.fillStyle = `rgba(190,220,255,${a})`;
+      const splashRgb = this.currentLevelId === 4 ? '190,255,175' : '190,220,255';
+      ctx.fillStyle = `rgba(${splashRgb},${a})`;
       ctx.fillRect(Math.round(sx), Math.round(sy), 2, 1);
-      ctx.fillStyle = `rgba(190,220,255,${a * 0.45})`;
+      ctx.fillStyle = `rgba(${splashRgb},${a * 0.45})`;
       ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 1, 1, 1);
       ctx.fillRect(Math.round(sx) + 2, Math.round(sy) - 1, 1, 1);
     }
@@ -427,7 +433,10 @@ export class SceneRenderer {
   }
 
   drawRain(ctx) {
-    ctx.strokeStyle = 'rgba(180,210,255,0.45)';
+    // 第 4 关是酸雨，雨丝偏黄绿，和冷色霓虹区分开
+    ctx.strokeStyle = this.currentLevelId === 4
+      ? 'rgba(180,255,150,0.42)'
+      : 'rgba(180,210,255,0.45)';
     ctx.lineWidth = 1;
     for (const d of this.rain) {
       ctx.globalAlpha = d.alpha;

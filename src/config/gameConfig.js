@@ -103,6 +103,57 @@ export const GameConfig = {
     aimTime: 750,           // 瞄准红线持续(ms)
   },
 
+  SHIELD: {                 // 盾卫：正面减伤，逼玩家绕后 / 近战 / 爆炸
+    width: 18,
+    height: 56,
+    crouchHeight: 32,
+    speed: 0.5,
+    hp: 8,
+    score: 260,
+    fireInterval: 1700,
+    bulletSpeed: 3.1,
+    bulletDamage: 1,
+    engageRange: 150,
+    frontMultiplier: 0.2,   // 从正面命中只吃 20% 伤害
+    breakAt: 0.5,           // 血量低于该比例时盾牌破碎
+    turnTime: 420,          // 转身迟滞(ms)，留出绕后输出窗口
+  },
+
+  HEAVY: {                  // 重装喷子：近距扇形弹，逼迫拉开距离
+    width: 18,
+    height: 56,
+    crouchHeight: 32,
+    speed: 0.6,
+    hp: 5,
+    score: 220,
+    fireInterval: 2100,
+    bulletSpeed: 3.0,
+    bulletDamage: 1,
+    engageRange: 150,
+    pellets: 5,             // 每轮扇形弹数
+    pelletGap: 55,          // 单发间隔(ms)
+    spread: 9,              // 单发散布(deg)
+  },
+
+  BIKER: {                  // 暴走族：疾行者的高速变体，冲撞更快更远
+    width: 18,
+    height: 56,
+    crouchHeight: 32,
+    speed: 1.95,
+    hp: 2,
+    score: 170,
+    fireInterval: 0,
+    bulletSpeed: 0,
+    bulletDamage: 0,
+    engageRange: 0,
+    chargeRange: 200,
+    chargeWindup: 320,
+    chargeDuration: 560,
+    chargeSpeed: 4.6,
+    chargeCooldown: 1200,
+    contactDamage: 1,
+  },
+
   BOSS: {                   // 关底帮派 BOSS
     width: 30,
     height: 80,
@@ -126,6 +177,30 @@ export const GameConfig = {
     slamCooldown: 3200,      // 震地冷却(ms)
     radialCooldown: 2600,    // 环形弹幕冷却(ms)
     nearRange: 150,          // 触发震地的距离
+  },
+
+  // 关卡专属 Boss 覆盖参数：未列出的字段沿用 BOSS 默认值
+  BOSS_PROFILES: {
+    2: {
+      summonType: 'heavy',
+      summonCount: 1,
+    },
+    3: {
+      summonType: 'shield',
+      summonCount: 1,
+    },
+    4: {
+      bulletSpeed: 3.4,
+      aimWindup: [620, 500, 420],
+      aimBurst: [3, 4, 4],
+      aimBurstGap: 105,
+      aimCooldown: [1250, 1050, 900],
+      dualLane: true,          // 三阶段：一轮打完立刻锁另一条弹道追击
+      followWindup: 430,       // 追击弹道的前摇(ms)
+      summonType: 'rusher',    // 二阶段召唤疾行者
+      summonCount: 1,          // 高架空间窄，召唤量减半
+      slamCooldown: 3000,
+    },
   },
 
   GRENADE: {
@@ -222,8 +297,10 @@ export const GameConfig = {
 };
 
 // 关卡元信息（用于选关界面），真正的关卡布局在 src/data/levels.json
+// tag 概括该关的独有玩法，让选关界面先说明"这关不一样在哪"
 export const LEVEL_META = [
-  { id: 1, name: '霓虹街区', worldWidth: 2400 },
-  { id: 2, name: '雨夜码头', worldWidth: 2300 },
-  { id: 3, name: '帮派老巢', worldWidth: 2700 },
+  { id: 1, name: '霓虹街区', worldWidth: 2400, tag: '蒸汽喷口 · 街区杂兵' },
+  { id: 2, name: '雨夜码头', worldWidth: 2300, tag: '吊机重锤 · 重装喷子' },
+  { id: 3, name: '帮派老巢', worldWidth: 2700, tag: '激光绊线 · 盾卫' },
+  { id: 4, name: '酸雨高架', worldWidth: 2800, tag: '轨道电击 · 暴走族' },
 ];

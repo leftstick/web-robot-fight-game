@@ -12,6 +12,9 @@ const ARCHETYPE_COLORS = {
   rusher: '#ff2e4a',
   gunner: '#ffa23d',
   sniper: '#5fe6ff',
+  shield: '#7cc7ff',
+  heavy: '#ff7a3d',
+  biker: '#c46bff',
 };
 
 // 人形暴徒：从屏幕右侧进入、向左推进、会站立/走动/开枪、利用掩体。
@@ -427,9 +430,11 @@ export class Thug extends EnemyBase {
 
 // 疾行者：不找掩体，贴脸后蓄力冲撞。冲撞可被跳跃或走位躲开。
 export class Rusher extends EnemyBase {
-  constructor(feetX, feetY) {
-    super(GameConfig.RUSHER, 'thug_mohawk', feetX, feetY);
-    this.archetype = 'rusher';
+  constructor(feetX, feetY, cfg = GameConfig.RUSHER, sheetKey = 'thug_mohawk', archetype = 'rusher') {
+    super(cfg, sheetKey, feetX, feetY);
+    this.archetype = archetype;
+    this.chargeRgb = archetype === 'biker' ? '196, 107, 255' : '255, 46, 74';
+    this.chargeTipColor = archetype === 'biker' ? '#e0b8ff' : '#ff8a9a';
     this.chargeState = 'idle';   // idle | windup | charging | recover
     this.chargeEnd = 0;
     this.nextChargeAt = 0;
@@ -441,7 +446,7 @@ export class Rusher extends EnemyBase {
     if (this.dead) return null;
     this.updateFacing(player);
 
-    const cfg = GameConfig.RUSHER;
+    const cfg = this.cfg;
     const pcx = player.x + player.width / 2;
     const mycx = this.getCenterX();
     const dist = Math.abs(pcx - mycx);
@@ -520,14 +525,35 @@ export class Rusher extends EnemyBase {
     const tip = startX + dir * len;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = `rgba(255, 46, 74, ${0.28 + pulse * 0.25})`;
+    ctx.fillStyle = `rgba(${this.chargeRgb}, ${0.28 + pulse * 0.25})`;
     ctx.fillRect(Math.min(startX, tip), feet - 3, len, 3);
     ctx.beginPath();
     ctx.moveTo(tip + dir * 7, feet - 5);
     ctx.lineTo(tip, feet - 10);
     ctx.lineTo(tip, feet);
     ctx.closePath();
+    ctx.fillStyle = this.chargeTipColor;
     ctx.fill();
+    ctx.restore();
+  }
+}
+
+// 暴走族：疾行者的高速变体，前摇更短、冲撞更远，出没于高架关卡
+export class Biker extends Rusher {
+  constructor(feetX, feetY) {
+    super(feetX, feetY, GameConfig.BIKER, 'thug_bald', 'biker');
+  }
+
+  draw(ctx, t) {
+    super.draw(ctx, t);
+    if (this.dead || this.chargeState !== 'charging') return;
+    // 紫色残影：让高速冲撞在画面里更醒目
+    const cx = this.getCenterX();
+    const feet = this.y + this.height;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = 'rgba(150, 90, 255, 0.18)';
+    ctx.fillRect(Math.round(cx - this.chargeDir * 22), feet - this.height, 22, this.height);
     ctx.restore();
   }
 }
@@ -573,6 +599,141 @@ export class Gunner extends EnemyBase {
       return this.tryShoot(t, player, true, cfg.spread);
     }
     return null;
+  }
+}
+
+// 重装喷子：推进到近距离后打一轮扇形霰弹，逼迫玩家拉开或跳上平台
+export class Heavy extends EnemyBase {
+  constructor(feetX, feetY) {
+    super(GameConfig.HEAVY, 'thug_mohawk', feetX, feetY);
+    this.archetype = 'heavy';
+    this.pelletsLeft = 0;
+    this.nextPelletAt = 0;
+  }
+
+  update(dtf, deltaTime, t, world, player) {
+    if (this.dead) return null;
+    this.updateFacing(player);
+
+    const cfg = this.cfg;
+    const pcx = player.x + player.width / 2;
+    const mycx = this.getCenterX();
+    const dist = Math.abs(pcx - mycx);
+
+    const side = Math.sign(mycx - pcx) || 1;
+    const dxTarget = (pcx + side * cfg.engageRange) - this.x;
+    this.vx = Math.abs(dxTarget) > 10 ? Math.sign(dxTarget) * cfg.speed : 0;
+    this.animTime += dtf * (this.vx !== 0 ? 1 : 0.5);
+    this.phys(dtf, world);
+
+    if (dist > cfg.engageRange + 170) return null;
+
+    if (this.pelletsLeft > 0) {
+      if (t >= this.nextPelletAt) {
+        this.pelletsLeft--;
+        this.nextPelletAt = t + cfg.pelletGap;
+        return this.tryShoot(t, player, true, cfg.spread);
+      }
+      return null;
+    }
+
+    if (t - this.lastShot >= cfg.fireInterval) {
+      this.pelletsLeft = cfg.pellets - 1;
+      this.nextPelletAt = t + cfg.pelletGap;
+      return this.tryShoot(t, player, true, cfg.spread);
+    }
+    return null;
+  }
+}
+
+// 盾卫：正面举盾减伤，转身有迟滞；绕后、近战、爆炸都能无视盾牌
+export class Shield extends EnemyBase {
+  constructor(feetX, feetY) {
+    super(GameConfig.SHIELD, 'thug_mask', feetX, feetY);
+    this.archetype = 'shield';
+    this.turnAt = 0;
+  }
+
+  get shieldBroken() {
+    return this.hp <= this.maxHp * this.cfg.breakAt;
+  }
+
+  // 正面命中只吃 frontMultiplier；盾牌破碎后恢复全额伤害
+  damageMultiplierAt(x) {
+    if (this.dead || this.shieldBroken) return 1;
+    const front = this.facing > 0
+      ? x >= this.getCenterX()
+      : x <= this.getCenterX();
+    return front ? this.cfg.frontMultiplier : 1;
+  }
+
+  update(dtf, deltaTime, t, world, player) {
+    if (this.dead) return null;
+
+    // 迟滞转身：玩家绕到背后时有约 0.4 秒的输出窗口
+    const pcx = player.x + player.width / 2;
+    const want = pcx >= this.getCenterX() ? 1 : -1;
+    if (want !== this.facing) {
+      if (!this.turnAt) this.turnAt = t + this.cfg.turnTime;
+      else if (t >= this.turnAt) {
+        this.facing = want;
+        this.turnAt = 0;
+      }
+    } else {
+      this.turnAt = 0;
+    }
+
+    const cfg = this.cfg;
+    const mycx = this.getCenterX();
+    const dist = Math.abs(pcx - mycx);
+
+    const side = Math.sign(mycx - pcx) || 1;
+    const dxTarget = (pcx + side * cfg.engageRange) - this.x;
+    this.vx = Math.abs(dxTarget) > 10 ? Math.sign(dxTarget) * cfg.speed : 0;
+    this.animTime += dtf * (this.vx !== 0 ? 1 : 0.5);
+    this.phys(dtf, world);
+
+    if (dist < cfg.engageRange + 150) return this.tryShoot(t, player);
+    return null;
+  }
+
+  draw(ctx, t) {
+    super.draw(ctx, t);
+    if (this.dead) return;
+
+    const cx = this.getCenterX();
+    const feet = this.y + this.height;
+    const broken = this.shieldBroken;
+    const px = Math.round(cx + this.facing * 9);
+    const plateH = Math.round(this.height * 0.66);
+    const top = Math.round(feet - plateH - 15);
+    const pulse = 0.5 + 0.5 * Math.sin(t / 160);
+
+    ctx.save();
+    // 盾牌主体：冷色金属板，与红色敌方弹道形成对比
+    ctx.fillStyle = broken ? '#2a3a46' : '#2d6f8c';
+    ctx.fillRect(px - 2, top, 5, plateH);
+    ctx.fillStyle = broken ? '#3d5260' : '#58c8e8';
+    ctx.fillRect(px - 2, top, 5, 2);
+    ctx.fillStyle = broken ? '#1c2831' : '#1b4a5e';
+    ctx.fillRect(px - 2, top + plateH - 2, 5, 2);
+
+    if (!broken) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = `rgba(124, 199, 255, ${0.18 + pulse * 0.16})`;
+      ctx.fillRect(px - 4, top - 1, 9, plateH + 2);
+      ctx.fillStyle = `rgba(220, 248, 255, ${0.5 + pulse * 0.35})`;
+      ctx.fillRect(px, top + 4, 1, plateH - 10);
+    } else {
+      // 裂盾：斜向裂纹，提示正面减伤已失效
+      ctx.fillStyle = 'rgba(10, 14, 18, 0.85)';
+      for (let i = 0; i < 3; i++) {
+        ctx.fillRect(px - 1 + (i % 2), top + 6 + i * 7, 3, 1);
+      }
+      ctx.fillStyle = 'rgba(255, 120, 80, 0.55)';
+      ctx.fillRect(px, top + 3, 1, 2);
+    }
+    ctx.restore();
   }
 }
 
@@ -677,8 +838,11 @@ export function createEnemy(type, feetX, feetY, elite = false) {
   let enemy;
   switch (type) {
     case 'rusher': enemy = new Rusher(feetX, feetY); break;
+    case 'biker': enemy = new Biker(feetX, feetY); break;
     case 'gunner': enemy = new Gunner(feetX, feetY); break;
     case 'sniper': enemy = new Sniper(feetX, feetY); break;
+    case 'heavy': enemy = new Heavy(feetX, feetY); break;
+    case 'shield': enemy = new Shield(feetX, feetY); break;
     default: enemy = new Thug(feetX, feetY);
   }
   if (elite) enemy.applyElite();
@@ -687,7 +851,11 @@ export function createEnemy(type, feetX, feetY, elite = false) {
 
 export class Boss extends EnemyBase {
   constructor(feetX, feetY, hp, opts = {}) {
-    super(GameConfig.BOSS, 'boss', feetX, feetY);
+    // 关卡可通过 profile 覆盖弹速/节奏/召唤兵种，未覆盖的沿用默认值
+    const cfg = { ...GameConfig.BOSS, ...(opts.profile || {}) };
+    super(cfg, 'boss', feetX, feetY);
+    this.cfg = cfg;
+    this.summonType = cfg.summonType || 'thug';
     if (hp) {
       this.hp = hp;
       this.maxHp = hp;
@@ -714,6 +882,7 @@ export class Boss extends EnemyBase {
     this.nextBurstAt = 0;
     this.aimInit = false;
     this.pendingAimSfx = false;
+    this.aimFollowup = false;  // 三阶段追击弹道标记，避免无限连发
 
     // 冲撞攻击状态
     this.chargeState = 'idle';   // idle | windup | charging | recover
@@ -744,8 +913,8 @@ export class Boss extends EnemyBase {
   damageMultiplierAt(x, y) {
     if (!this.coreOpen || this.dead) return 1;
     const c = this.corePoint;
-    return Math.hypot(x - c.x, y - c.y) <= GameConfig.BOSS.coreRadius
-      ? GameConfig.BOSS.coreMultiplier
+    return Math.hypot(x - c.x, y - c.y) <= this.cfg.coreRadius
+      ? this.cfg.coreMultiplier
       : 1;
   }
 
@@ -755,7 +924,7 @@ export class Boss extends EnemyBase {
 
     // 血量跨过阶段阈值时，先锁血并进入阶段转换，不让 Boss 被一发跳阶段秒掉
     if (this.phase < 3) {
-      const cfg = GameConfig.BOSS;
+      const cfg = this.cfg;
       const nextThreshold = this.phase === 1 ? cfg.phaseThresholds[0] : cfg.phaseThresholds[1];
       const floor = Math.max(1, Math.floor(this.maxHp * nextThreshold));
       if (this.hp - damage <= floor) {
@@ -770,12 +939,12 @@ export class Boss extends EnemyBase {
   }
 
   advancePhase(t) {
-    const cfg = GameConfig.BOSS;
+    const cfg = this.cfg;
     if (this.phase === 1) {
       this.phase = 2;
       this.phaseTransitionUntil = t + cfg.phaseInvuln;
       this.phaseFlashUntil = this.phaseTransitionUntil;
-      this.pendingSummon = 2;
+      this.pendingSummon = cfg.summonCount ?? 2;
       this.nextSlamAt = t + 900;
     } else if (this.phase === 2) {
       this.phase = 3;
@@ -790,6 +959,7 @@ export class Boss extends EnemyBase {
     this.vx = 0;
     this.aimState = 'idle';
     this.aimBurstLeft = 0;
+    this.aimFollowup = false;
     this.nextAimAt = t + cfg.phaseInvuln + 400;
     this.chargeState = 'idle';
     this.slamState = 'idle';
@@ -835,7 +1005,7 @@ export class Boss extends EnemyBase {
       return null;
     }
 
-    const cfg = GameConfig.BOSS;
+    const cfg = this.cfg;
     const pcx = player.x + player.width / 2;
     const mycx = this.getCenterX();
     const dist = Math.abs(pcx - mycx);
@@ -868,7 +1038,13 @@ export class Boss extends EnemyBase {
         return this.fireLockedShot();
       }
       if (this.aimBurstLeft <= 0) {
+        // 三阶段：一轮打完立刻锁另一条弹道，逼玩家在蹲/跳之间连续判断
+        if (this.phase >= 3 && cfg.dualLane && !this.aimFollowup) {
+          this.beginAim(t, player, true);
+          return null;
+        }
         this.aimState = 'idle';
+        this.aimFollowup = false;
         this.lastShot = t;
         this.nextAimAt = t + cfg.aimCooldown[this.phase - 1];
       }
@@ -982,12 +1158,13 @@ export class Boss extends EnemyBase {
   }
 
   // 锁定一条弹道：红色平射（蹲下躲）与橙色压地（起跳躲）交替
-  beginAim(t, player) {
-    const cfg = GameConfig.BOSS;
+  beginAim(t, player, followup = false) {
+    const cfg = this.cfg;
     const muzzle = this.getMuzzle();
     this.aimState = 'telegraph';
-    this.aimUntil = t + cfg.aimWindup[this.phase - 1];
+    this.aimUntil = t + (followup ? cfg.followWindup : cfg.aimWindup[this.phase - 1]);
     this.aimLow = !this.aimLow;
+    this.aimFollowup = followup;
     this.vx = 0;
 
     let dx = (player.x + player.width / 2) - muzzle.x;
@@ -1009,7 +1186,7 @@ export class Boss extends EnemyBase {
   }
 
   fireLockedShot() {
-    const cfg = GameConfig.BOSS;
+    const cfg = this.cfg;
     const muzzle = this.getMuzzle();
     const eb = GameConfig.ENEMY_BULLET;
     const low = this.aimLow;
@@ -1121,7 +1298,7 @@ export class Boss extends EnemyBase {
     // 三阶段核心：脉动光环 + 十字准星，提示这里吃双倍伤害
     if (this.coreOpen) {
       const pulse = 0.5 + 0.5 * Math.sin(t / 90);
-      const r = GameConfig.BOSS.coreRadius + 4 + pulse * 4;
+      const r = this.cfg.coreRadius + 4 + pulse * 4;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       const glow = ctx.createRadialGradient(c.x, c.y, 2, c.x, c.y, r * 2.2);
@@ -1169,7 +1346,7 @@ export class Boss extends EnemyBase {
 
     // 阶段转换：扩散冲击环
     if (this.phaseTransitionUntil > t) {
-      const p = 1 - (this.phaseTransitionUntil - t) / GameConfig.BOSS.phaseInvuln;
+      const p = 1 - (this.phaseTransitionUntil - t) / this.cfg.phaseInvuln;
       const radius = 10 + p * 46;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';

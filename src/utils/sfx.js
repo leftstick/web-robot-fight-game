@@ -175,4 +175,24 @@ export class Sfx {
   steam() {
     this._noise({ dur: 0.6, vol: 0.15, cutoff: 3000 });
   }
+
+  // 轨道电击：短促电流 + 高频嗡鸣
+  rail() {
+    this._tone({ freq: 1200, slideTo: 460, type: 'square', dur: 0.12, vol: 0.08 });
+    this._noise({ dur: 0.45, vol: 0.12, cutoff: 5200 });
+  }
+
+  // 吊机重锤：钢缆摩擦 + 落地的低频闷响
+  crane() {
+    this._tone({ freq: 320, slideTo: 90, type: 'triangle', dur: 0.18, vol: 0.12 });
+    this._tone({ freq: 80, slideTo: 30, type: 'sawtooth', dur: 0.4, vol: 0.3 });
+    this._noise({ dur: 0.28, vol: 0.26, cutoff: 700 });
+  }
+
+  // 激光绊线：高频通电啸叫 + 细碎电流
+  laser() {
+    this._tone({ freq: 1800, slideTo: 900, type: 'sawtooth', dur: 0.16, vol: 0.07 });
+    this._tone({ freq: 640, slideTo: 300, type: 'square', dur: 0.1, vol: 0.06 });
+    this._noise({ dur: 0.3, vol: 0.08, cutoff: 6200 });
+  }
 }

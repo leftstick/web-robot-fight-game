@@ -6,12 +6,26 @@ import { Cover } from './Cover.js';
 // JSON 数据以 960x540 基准编写，加载时按 0.5 缩放到 480x270 逻辑空间。
 const SCALE = 0.5;
 
+// 每关的掩体轮廓组合：按关卡 id 循环取用，避免四关都是同一套道具轮播。
+// 街区=纸箱/路障/垃圾/售货机；码头=货箱/油桶/沙袋；老巢=售货机/轿车/路障；高架=护栏/轿车/油桶。
+const COVER_PALETTES = {
+  1: ['crate', 'barrier', 'trash', 'vending', 'crate', 'barrier', 'trash', 'crate'],
+  2: ['crate', 'oildrum', 'sandbags', 'crate', 'oildrum', 'barrier', 'sandbags', 'oildrum'],
+  3: ['vending', 'car', 'barrier', 'crate', 'vending', 'sandbags', 'car', 'crate'],
+  4: ['barrier', 'car', 'oildrum', 'barrier', 'crate', 'car', 'barrier', 'oildrum'],
+};
+
+function pickCoverType(levelId, index) {
+  const palette = COVER_PALETTES[levelId] || COVER_TYPES;
+  return palette[index % palette.length];
+}
+
 // 掩体使用画好的原生尺寸，位置按关卡里的中心点重新贴地摆放。
-function normalizeCovers(covers, posScale) {
+function normalizeCovers(covers, posScale, levelId) {
   return (covers || []).map((c, i) => {
     const type = COVER_INFO[c.type]
       ? c.type
-      : (!c.destructible ? 'car' : COVER_TYPES[i % COVER_TYPES.length]);
+      : (!c.destructible ? 'car' : pickCoverType(levelId, i));
     const info = COVER_INFO[type];
     const sourceW = c.w || info.w;
     const centerX = (c.x + sourceW / 2) * posScale;
@@ -113,7 +127,7 @@ function scaleLevel(d) {
       x: Math.round(p.x * SCALE), y: Math.round(p.y * SCALE),
       w: Math.round(p.w * SCALE), h: Math.round(p.h * SCALE),
     })),
-    covers: normalizeCovers([...(d.covers || []), ...secretCovers], SCALE),
+    covers: normalizeCovers([...(d.covers || []), ...secretCovers], SCALE, d.id),
     encounters: rawEncounters.map((enc, i) => ({
       id: enc.id || `enc-${i}`,
       label: enc.label || '',
@@ -131,6 +145,7 @@ function scaleLevel(d) {
       x: Math.round(h.x * SCALE),
       w: Math.round((h.w || 74) * SCALE),
       type: h.type || 'steam',
+      beam: h.beam || null,
     })),
     boss: d.boss ? {
       x: Math.round(d.boss.x * SCALE),
@@ -151,7 +166,7 @@ export class Level {
       x: p.x, y: p.y, w: p.w, h: p.h,
     }));
 
-    this.covers = normalizeCovers(data.covers, 1).map(
+    this.covers = normalizeCovers(data.covers, 1, data.id).map(
       (c) => new Cover(c.x, c.y, c.w, c.h, c.hp, c.destructible, c.type, c.loot, c.secret),
     );
 
@@ -177,10 +192,12 @@ export class Level {
 
     // 中途补给与场景机关
     this.checkpoints = (data.checkpoints || []).map((c) => ({ x: c.x, used: false }));
-    this.hazards = (data.hazards || []).map((h) => ({
+    this.hazards = (data.hazards || []).map((h, i) => ({
       x: h.x,
       w: h.w || 37,
       type: h.type || 'steam',
+      // 激光绊线默认高低交替：偶数高位（蹲下躲），奇数低位（起跳躲）
+      beam: h.type === 'laser' ? (h.beam || (i % 2 === 0 ? 'high' : 'low')) : null,
       wasActive: false,
     }));
 
@@ -201,6 +218,8 @@ export class Level {
     for (const c of this.covers) {
       c.hp = c.maxHp;
       c.hitFlash = 0;
+      c.destroyed = false;
+      c.claimedBy = null;
     }
   }
 }

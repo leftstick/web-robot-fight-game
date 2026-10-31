@@ -231,7 +231,7 @@ export class AssetLoader {
     }
     // 背景层
     const bgKeys = [];
-    for (const lv of [1, 2, 3]) {
+    for (const lv of Object.keys(ASSETS.backgrounds)) {
       for (const layer of ['sky', 'far', 'mid', 'near', 'fg', 'ground']) {
         entries.push({ key: `bg_${lv}_${layer}`, png: ASSETS.backgrounds[lv][layer], json: null });
       }

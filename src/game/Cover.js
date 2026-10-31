@@ -33,6 +33,9 @@ export class Cover {
     this.secret = !!secret;
     this.hitFlash = 0;
     this.claimedBy = null;
+    this.destroyed = false;
+    // 油桶被击碎时会殉爆，是本作唯一的场景连锁伤害来源
+    this.explosive = this.type === 'oildrum';
   }
 
   getBounds() {
@@ -84,6 +87,30 @@ export class Cover {
     sheet.drawFrame(ctx, frame, dx, dy, fw, fh);
     if (this.hitFlash > 0 && stage < 2) {
       sheet.drawFrameFlash(ctx, frame, dx, dy, fw, fh, 0.65);
+    }
+
+    // 爆炸油桶：桶顶红色警示灯 + 呼吸式光晕，提示"打它会炸"
+    if (this.explosive && this.hp > 0) {
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 230);
+      const mx = Math.round(this.x + this.w / 2);
+      const my = Math.round(this.y) - 5;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(mx, my, 0, mx, my, 9);
+      g.addColorStop(0, `rgba(255, 120, 60, ${0.5 + pulse * 0.4})`);
+      g.addColorStop(1, 'rgba(255, 60, 30, 0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(mx - 9, my - 9, 18, 18);
+      ctx.fillStyle = `rgba(255, 196, 90, ${0.65 + pulse * 0.35})`;
+      ctx.beginPath();
+      ctx.moveTo(mx, my - 4);
+      ctx.lineTo(mx + 3, my + 1);
+      ctx.lineTo(mx - 3, my + 1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = `rgba(40, 20, 10, ${0.55 + pulse * 0.3})`;
+      ctx.fillRect(mx - 1, my - 1, 2, 2);
+      ctx.restore();
     }
 
     // 隐藏补给：四角金色描边 + 上方闪烁信号点，提示这里可以打

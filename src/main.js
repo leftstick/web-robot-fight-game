@@ -791,6 +791,7 @@ class GameApp {
       card.innerHTML = `
         <div class="level-number">${levelNum}</div>
         <div class="level-name">${config.name}</div>
+        ${config.tag ? `<div class="level-tag">${config.tag}</div>` : ''}
       `;
 
       if (unlocked) {

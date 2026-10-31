@@ -53,6 +53,14 @@ export const ASSETS = {
       fg: 'assets/bg_level3_fg.png',
       ground: 'assets/bg_level3_ground.png',
     },
+    4: {
+      sky: 'assets/bg_level4_sky.png',
+      far: 'assets/bg_level4_far.png',
+      mid: 'assets/bg_level4_mid.png',
+      near: 'assets/bg_level4_near.png',
+      fg: 'assets/bg_level4_fg.png',
+      ground: 'assets/bg_level4_ground.png',
+    },
   },
 };
 
