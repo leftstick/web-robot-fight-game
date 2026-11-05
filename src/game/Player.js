@@ -17,7 +17,26 @@ function clamp01(v) {
 
 // 玩家：有重力 vy / gravity / onGround，y 由重力 + 平台碰撞决定。
 export class Player {
-  constructor(spawnX) {
+  constructor(spawnX, characterId = 'viktor') {
+    const chars = GameConfig.CHARACTERS || [];
+    this.profile = chars.find((c) => c.id === characterId) || chars[0] || {
+      id: 'viktor', name: '维克', sheet: 'player', color: '#3ee6ff',
+      lives: P.lives, speed: P.speed, jumpSpeed: P.jumpSpeed,
+      dashSpeed: P.dashSpeed, dashDuration: P.dashDuration,
+      dashCooldown: P.dashCooldown, dashIFrames: P.dashIFrames,
+      meleeMultiplier: 1, startWeapons: [],
+    };
+    this.characterId = this.profile.id;
+    this.sheetKey = this.profile.sheet || 'player';
+    this.speed = this.profile.speed ?? P.speed;
+    this.jumpSpeed = this.profile.jumpSpeed ?? P.jumpSpeed;
+    this.doubleJump = this.profile.doubleJump ?? P.doubleJump;
+    this.dashSpeed = this.profile.dashSpeed ?? P.dashSpeed;
+    this.dashDuration = this.profile.dashDuration ?? P.dashDuration;
+    this.dashCooldown = this.profile.dashCooldown ?? P.dashCooldown;
+    this.dashIFrames = this.profile.dashIFrames ?? P.dashIFrames;
+    this.meleeMultiplier = this.profile.meleeMultiplier ?? 1;
+
     this.standHeight = P.height;
     this.crouchHeight = P.crouchHeight;
     this.width = P.width;
@@ -101,6 +120,14 @@ export class Player {
     this.prevY = 0;
     this.animTime = 0;
     this.frame = 0;
+
+    // 角色初始武器：默认只带手枪，专精角色额外携带一把签名武器
+    for (const entry of this.profile.startWeapons || []) {
+      const cfg = WEAPON_BY_ID.get(entry.id);
+      if (!cfg || cfg.infiniteAmmo) continue;
+      this.addWeapon(entry.id, entry.ammo ?? cfg.pickupAmmo ?? 30);
+    }
+    this.weaponIndex = this.weaponIds.length > 1 ? this.weaponIds.length - 1 : 0;
   }
 
   getBounds() {
@@ -146,14 +173,14 @@ export class Player {
 
   jump() {
     if (this.onGround) {
-      this.vy = P.jumpSpeed;
+      this.vy = this.jumpSpeed;
       this.onGround = false;
-      this.jumpsLeft = P.doubleJump ? 1 : 0;
+      this.jumpsLeft = this.doubleJump ? 1 : 0;
       return true;
     }
-    if (P.doubleJump && this.jumpsLeft > 0) {
+    if (this.doubleJump && this.jumpsLeft > 0) {
       this.jumpsLeft--;
-      this.vy = P.jumpSpeed * 0.92;
+      this.vy = this.jumpSpeed * 0.92;
       return true;
     }
     return false;
@@ -183,9 +210,9 @@ export class Player {
       : (this.moveRight && !this.moveLeft ? 1 : this.facing);
     this.dashDir = dir;
     this.facing = dir;
-    this.dashUntil = currentTime + P.dashDuration;
-    this.dashCooldownUntil = currentTime + P.dashCooldown;
-    this.dashIFramesUntil = currentTime + P.dashIFrames;
+    this.dashUntil = currentTime + this.dashDuration;
+    this.dashCooldownUntil = currentTime + this.dashCooldown;
+    this.dashIFramesUntil = currentTime + this.dashIFrames;
     this.dashGhostAt = currentTime;
     return true;
   }
@@ -206,7 +233,7 @@ export class Player {
     if (this.moveLeft) move -= 1;
     if (this.moveRight) move += 1;
 
-    let speed = P.speed * (this.onGround ? 1 : P.airControl);
+    let speed = this.speed * (this.onGround ? 1 : P.airControl);
     if (this.aiming) speed *= 0.5;   // 举枪瞄准：移动减速
     if (this.crouching) speed *= 0.45;  // 蹲下移动：大幅减速（蹲走）
     this.vx = move * speed;
@@ -214,7 +241,7 @@ export class Player {
     // 冲刺期间锁定方向与速度，忽略普通移动输入
     const dashing = this.isDashing(this._t);
     if (dashing) {
-      this.vx = this.dashDir * P.dashSpeed;
+      this.vx = this.dashDir * this.dashSpeed;
       this.facing = this.dashDir;
     } else if (move !== 0) {
       this.facing = move > 0 ? 1 : -1;
@@ -322,16 +349,34 @@ export class Player {
     return WEAPON_BY_ID.get(id) || GameConfig.WEAPONS[0];
   }
 
-  createBullet(weapon) {
+  // 一次扳机可能产生多发弹丸（霰弹枪），统一返回数组。
+  createBullets(weapon) {
+    const w = weapon || this.getWeapon();
+    const count = Math.max(1, w.pellets || 1);
+    const bullets = [];
+    for (let i = 0; i < count; i++) {
+      bullets.push(this.createBullet(w, i, count));
+    }
+    return bullets;
+  }
+
+  createBullet(weapon, index = 0, count = 1) {
     const w = weapon || this.getWeapon();
     const muzzle = this.getMuzzle();
     const width = w.bulletWidth || P.bulletWidth;
     const height = w.bulletHeight || P.bulletHeight;
     const speed = w.bulletSpeed || P.bulletSpeed;
 
-    // 散布按角度配置，向上/向下随机偏转；0 散布保持完全水平
-    const spreadRad = ((w.spreadDeg || 0) * Math.PI) / 180;
-    const angle = spreadRad ? (Math.random() * 2 - 1) * spreadRad : 0;
+    // 霰弹按扇形均匀铺开；普通武器用随机散布；0 散布保持完全水平
+    let angle = 0;
+    if (count > 1) {
+      const fan = ((w.pelletSpreadDeg || 0) * Math.PI) / 180;
+      angle = count === 1 ? 0 : -fan + (fan * 2 * index) / (count - 1);
+      angle += (Math.random() * 2 - 1) * 0.015;
+    } else {
+      const spreadRad = ((w.spreadDeg || 0) * Math.PI) / 180;
+      angle = spreadRad ? (Math.random() * 2 - 1) * spreadRad : 0;
+    }
 
     const x = this.facing > 0 ? muzzle.x : muzzle.x - width;
     return new Bullet(x, muzzle.y - height / 2, Math.cos(angle) * speed * this.facing, Math.sin(angle) * speed, {
@@ -343,6 +388,7 @@ export class Player {
       style: w.bulletStyle || 'pistol',
       splashRadius: w.splashRadius || 0,
       splashDamage: w.splashDamage || 0,
+      pierce: w.pierce || 0,
       impactShake: w.impactShake,
       impactShakeIntensity: w.impactShakeIntensity,
       hitStop: w.hitStop,
@@ -568,6 +614,8 @@ export class Player {
 
   draw(ctx, currentTime, cameraX) {
     const sprites = getSprites();
+    const sheet = sprites[this.sheetKey] || sprites.player;
+    const neon = this.profile.color || '#45eeff';
     const frame = this.pickFrame(currentTime);
     const cx = this.getCenterX();
     const feet = this.y + this.height;
@@ -592,18 +640,18 @@ export class Player {
       for (let i = 1; i <= 2; i++) {
         ctx.save();
         ctx.globalAlpha = 0.22 / i;
-        sprites.player.drawTint(
+        sheet.drawTint(
           ctx, frame, cx + recoil - this.dashDir * i * 9, feet,
-          this.facing, '#45eeff', 0.9,
+          this.facing, neon, 0.9,
         );
         ctx.restore();
       }
     }
 
-    // 环境霓虹边缘光：左青右粉，让角色从暗背景里“剥”出来
-    sprites.player.drawTint(ctx, frame, cx + recoil - 1, feet, this.facing, '#00e5ff', 0.28);
-    sprites.player.drawTint(ctx, frame, cx + recoil + 1, feet, this.facing, '#ff2e88', 0.15);
-    sprites.player.draw(ctx, frame, cx + recoil, feet, this.facing);
+    // 环境霓虹边缘光：角色主色一侧 + 粉色一侧，让角色从暗背景里“剥”出来
+    sheet.drawTint(ctx, frame, cx + recoil - 1, feet, this.facing, neon, 0.30);
+    sheet.drawTint(ctx, frame, cx + recoil + 1, feet, this.facing, '#ff2e88', 0.15);
+    sheet.draw(ctx, frame, cx + recoil, feet, this.facing);
 
     // —— 绘制刀（持刀模式或劈砍中）——
     if (this.meleeMode || this.meleePhase !== 'idle') {

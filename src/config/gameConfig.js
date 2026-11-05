@@ -269,6 +269,37 @@ export const GameConfig = {
     autoSwitchDist: 68,     // 距离敌人多近时自动切刀
   },
 
+  // 可选角色：共享同一套动作与武器系统，用速度、生命、冲刺和初始武器区分手感。
+  CHARACTERS: [
+    {
+      id: 'viktor', name: '维克', code: 'VICTOR',
+      trait: '均衡 · 标准装备', desc: '移动、生命与冲刺都居中，适合第一次通关。',
+      color: '#3ee6ff', sheet: 'player',
+      lives: 5, speed: 2.3, jumpSpeed: -6.6,
+      dashSpeed: 7.4, dashDuration: 170, dashCooldown: 820, dashIFrames: 150,
+      meleeMultiplier: 1,
+      startWeapons: [],
+    },
+    {
+      id: 'mira', name: '米拉', code: 'MIRA',
+      trait: '疾行 · 冲锋枪', desc: '跑得更快、冲刺更频繁，但生命少 1 点，靠走位换生存。',
+      color: '#c77dff', sheet: 'player_mira',
+      lives: 4, speed: 2.72, jumpSpeed: -7.0,
+      dashSpeed: 8.1, dashDuration: 180, dashCooldown: 560, dashIFrames: 165,
+      meleeMultiplier: 0.8,
+      startWeapons: [{ id: 'smg', ammo: 90 }],
+    },
+    {
+      id: 'tetsu', name: '铁山', code: 'TETSU',
+      trait: '重装 · 霰弹枪', desc: '7 点生命与更重的劈砍，代价是移速和冲刺冷却。',
+      color: '#ff8a3d', sheet: 'player_tetsu',
+      lives: 7, speed: 2.05, jumpSpeed: -6.3,
+      dashSpeed: 6.8, dashDuration: 155, dashCooldown: 1000, dashIFrames: 130,
+      meleeMultiplier: 1.5,
+      startWeapons: [{ id: 'shotgun', ammo: 18 }],
+    },
+  ],
+
   COLORS: {
     playerBullet: '#ffe066',
     neon: ['#ff2e88', '#00e5ff', '#b14aed', '#39ff88', '#ff8a3d'],
@@ -313,6 +344,39 @@ export const GameConfig = {
       impactShake: 9, impactShakeIntensity: 6, hitStop: 42,
       pickupAmmo: 24, maxAmmo: 60,
     },
+    {
+      id: 'shotgun', name: '霰弹枪', color: '#ff8a3d',
+      trait: '近距 · 六连扇',
+      fireInterval: 620, bulletSpeed: 6.8, bulletDamage: 1,
+      bulletWidth: 7, bulletHeight: 3,
+      spreadDeg: 0, pellets: 6, pelletSpreadDeg: 12,
+      bulletStyle: 'pellet', sfx: 'shotgun', muzzleScale: 0.9, muzzleTint: '#ffb347',
+      fireShake: 4,
+      impactShake: 5, impactShakeIntensity: 3, hitStop: 16,
+      pickupAmmo: 18, maxAmmo: 54,
+    },
+    {
+      id: 'smg', name: '冲锋枪', color: '#c77dff',
+      trait: '极速 · 压制',
+      fireInterval: 46, bulletSpeed: 8.8, bulletDamage: 1,
+      bulletWidth: 9, bulletHeight: 2,
+      spreadDeg: 5.5,
+      bulletStyle: 'smg', sfx: 'smg', muzzleScale: 0.38, muzzleTint: '#c77dff',
+      fireShake: 1,
+      impactShake: 3, impactShakeIntensity: 2, hitStop: 12,
+      pickupAmmo: 90, maxAmmo: 270,
+    },
+    {
+      id: 'rail', name: '磁轨炮', color: '#b14aed',
+      trait: '穿透 · 重击',
+      fireInterval: 720, bulletSpeed: 12, bulletDamage: 5,
+      bulletWidth: 26, bulletHeight: 4,
+      spreadDeg: 0, pierce: 3,
+      bulletStyle: 'rail', sfx: 'rail', muzzleScale: 1.1, muzzleTint: '#d9a6ff',
+      fireShake: 7,
+      impactShake: 10, impactShakeIntensity: 7, hitStop: 48,
+      pickupAmmo: 8, maxAmmo: 24,
+    },
   ],
 
   // 掉落与拾取
@@ -326,11 +390,14 @@ export const GameConfig = {
     drops: [
       { type: 'health', weight: 36 },
       { type: 'ammo', weight: 28 },
-      { type: 'rifle', weight: 22 },
-      { type: 'plasma', weight: 14 },
+      { type: 'rifle', weight: 18 },
+      { type: 'plasma', weight: 10 },
+      { type: 'shotgun', weight: 12 },
+      { type: 'smg', weight: 12 },
+      { type: 'rail', weight: 6 },
     ],
-    weaponAmmo: { rifle: 60, plasma: 24 },
-    ammoBox: { rifle: 30, plasma: 12 },
+    weaponAmmo: { rifle: 60, plasma: 24, shotgun: 18, smg: 90, rail: 8 },
+    ammoBox: { rifle: 30, plasma: 12, shotgun: 12, smg: 45, rail: 4 },
   },
 };
 

@@ -6,6 +6,9 @@ export const PICKUP_DEFS = {
   ammo: { label: '弹药箱', color: '#ffe066', w: 14, h: 9 },
   rifle: { label: '突击步枪', color: '#5fe6ff', w: 16, h: 9, weapon: 'rifle' },
   plasma: { label: '等离子枪', color: '#39ff88', w: 15, h: 10, weapon: 'plasma' },
+  shotgun: { label: '霰弹枪', color: '#ff8a3d', w: 16, h: 10, weapon: 'shotgun' },
+  smg: { label: '冲锋枪', color: '#c77dff', w: 16, h: 9, weapon: 'smg' },
+  rail: { label: '磁轨炮', color: '#b14aed', w: 18, h: 9, weapon: 'rail' },
 };
 
 const WEAPON_BY_ID = new Map(GameConfig.WEAPONS.map((w) => [w.id, w]));
@@ -150,6 +153,9 @@ export class Pickup {
     if (this.type === 'health') this.drawHealth(ctx, x, y);
     else if (this.type === 'ammo') this.drawAmmo(ctx, x, y);
     else if (this.type === 'rifle') this.drawRifle(ctx, x, y);
+    else if (this.type === 'shotgun') this.drawShotgun(ctx, x, y);
+    else if (this.type === 'smg') this.drawSmg(ctx, x, y);
+    else if (this.type === 'rail') this.drawRail(ctx, x, y);
     else this.drawPlasma(ctx, x, y);
 
     // —— 名称牌 ——
@@ -265,5 +271,64 @@ export class Pickup {
     ctx.fillStyle = '#39ff88';
     ctx.fillRect(x + 2, y + 3, 1, 4);
     ctx.fillRect(x + w - 3, y + 3, 1, 4);
+  }
+
+  drawShotgun(ctx, x, y) {
+    const w = this.w;
+    const h = this.h;
+    ctx.fillStyle = '#2a160c';
+    ctx.fillRect(x + 1, y + 2, w - 2, h - 3);
+    ctx.fillStyle = '#ff8a3d';
+    ctx.fillRect(x + 1, y + h - 2, w - 2, 1);
+    // 上下双管 + 木质护木
+    ctx.fillStyle = '#050a10';
+    ctx.fillRect(x + 2, y + 3, 12, 2);
+    ctx.fillRect(x + 2, y + 6, 12, 1);
+    ctx.fillStyle = '#ffc07a';
+    ctx.fillRect(x + 2, y + 3, 11, 1);
+    ctx.fillStyle = '#7a4522';
+    ctx.fillRect(x + 3, y + 5, 5, 2);
+    ctx.fillStyle = '#ff8a3d';
+    ctx.fillRect(x + 13, y + 3, 2, 1);
+    ctx.fillRect(x + 13, y + 6, 2, 1);
+  }
+
+  drawSmg(ctx, x, y) {
+    const w = this.w;
+    const h = this.h;
+    ctx.fillStyle = '#1d1230';
+    ctx.fillRect(x + 1, y + 2, w - 2, h - 3);
+    ctx.fillStyle = '#c77dff';
+    ctx.fillRect(x + 1, y + h - 2, w - 2, 1);
+    // 紧凑机匣 + 前握把 + 长弹匣
+    ctx.fillStyle = '#050a10';
+    ctx.fillRect(x + 2, y + 3, 10, 2);
+    ctx.fillRect(x + 11, y + 3, 4, 1);
+    ctx.fillRect(x + 5, y + 5, 2, 4);
+    ctx.fillRect(x + 9, y + 5, 1, 3);
+    ctx.fillStyle = '#e6c9ff';
+    ctx.fillRect(x + 2, y + 3, 9, 1);
+    ctx.fillStyle = '#c77dff';
+    ctx.fillRect(x + 3, y + 4, 3, 1);
+  }
+
+  drawRail(ctx, x, y) {
+    const w = this.w;
+    const h = this.h;
+    ctx.fillStyle = '#1a0d2c';
+    ctx.fillRect(x + 1, y + 2, w - 2, h - 3);
+    ctx.fillStyle = '#b14aed';
+    ctx.fillRect(x + 1, y + h - 2, w - 2, 1);
+    // 双轨线圈 + 中央白热弹芯
+    ctx.fillStyle = '#050a10';
+    ctx.fillRect(x + 1, y + 4, w - 2, 2);
+    ctx.fillStyle = '#b14aed';
+    ctx.fillRect(x + 2, y + 3, 14, 1);
+    ctx.fillRect(x + 2, y + 6, 14, 1);
+    ctx.fillStyle = '#f2dcff';
+    ctx.fillRect(x + 5, y + 4, 8, 1);
+    ctx.fillStyle = '#d9a6ff';
+    ctx.fillRect(x + 3, y + 2, 2, 1);
+    ctx.fillRect(x + 13, y + 2, 2, 1);
   }
 }

@@ -24,9 +24,11 @@ export class Bullet {
     this.damage = options.damage;
     this.color = options.color;
     this.owner = options.owner;
-    this.style = options.style || 'pistol';        // pistol | rifle | plasma
+    this.style = options.style || 'pistol';        // pistol | rifle | smg | pellet | plasma | rail
     this.splashRadius = options.splashRadius || 0;
     this.splashDamage = options.splashDamage || 0;
+    this.pierce = options.pierce || 0;             // 可额外穿透的敌人数量
+    this.hitSet = new Set();                       // 防止穿透弹重复命中同一目标
     this.impactShake = options.impactShake ?? 4;
     this.impactShakeIntensity = options.impactShakeIntensity ?? 3;
     this.hitStop = options.hitStop ?? 22;
@@ -54,7 +56,38 @@ export class Bullet {
       this.drawPlasma(ctx);
       return;
     }
+    if (this.style === 'rail') {
+      this.drawRail(ctx);
+      return;
+    }
     this.drawTracer(ctx);
+  }
+
+  // 磁轨弹：长条白热核心 + 紫色电弧，视觉上明确“能穿透一排”
+  drawRail(ctx) {
+    const cx = this.x + this.width / 2;
+    const cy = this.y + this.height / 2;
+    const dir = this.vx >= 0 ? 1 : -1;
+    const len = this.width * 2.6;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = hexToRgba(this.color, 0.22);
+    ctx.fillRect(cx - len / 2, cy - this.height * 1.8, len, this.height * 3.6);
+    const grd = ctx.createLinearGradient(cx - len / 2, 0, cx + len / 2, 0);
+    grd.addColorStop(0, hexToRgba(this.color, 0));
+    grd.addColorStop(0.4, hexToRgba(this.color, 0.85));
+    grd.addColorStop(1, '#f2dcff');
+    ctx.fillStyle = grd;
+    ctx.fillRect(cx - len / 2, cy - this.height / 2, len, this.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cx - len * 0.25, cy - 1, len * 0.75, 2);
+    // 电弧：沿飞行方向的 2 条短线
+    ctx.fillStyle = '#e7b8ff';
+    for (let i = 0; i < 2; i++) {
+      const yOff = (i === 0 ? -1 : 1) * (2 + (Math.floor(this.age) % 2));
+      ctx.fillRect(cx + dir * (2 + i * 3), cy + yOff, 4, 1);
+    }
+    ctx.restore();
   }
 
   // 圆形能量弹：Boss 环形弹幕使用，不依赖速度方向

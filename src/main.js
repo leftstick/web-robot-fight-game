@@ -1,5 +1,6 @@
 import { Game, GameState } from './game/Game.js';
 import { LEVEL_META, GameConfig } from './config/gameConfig.js';
+import { getSprites } from './game/SpriteSheet.js';
 
 // 按键提示文案：按当前设备切换，手柄连接时优先显示手柄按键
 const INPUT_HINTS = {
@@ -42,6 +43,11 @@ class GameApp {
     };
 
     this.unlockedLevels = this.loadProgress();
+
+    // 干员选择：角色卡片 + 当前选择（本地持久化）
+    this.characterId = this.loadCharacter();
+    this.characterGrid = document.getElementById('characterGrid');
+    this.characterCardEls = new Map();
 
     // 手柄 UI：连接/断开提示 + 按键图例
     this.gpLegend = document.getElementById('gpLegend');
@@ -117,10 +123,12 @@ class GameApp {
     this.setupEventListeners();
     this.setupDeviceSpecific();
     this.renderLevelGrid();
+    this.renderCharacterCards();
     this.checkGamepadAvailability();
     // 显示加载画面，素材加载完成后显示开始界面
     this.showScreen('start');
-    this.game.init();
+    this.game.setCharacter(this.characterId);
+    this.game.init().then(() => this.drawCharacterPortraits());
     this.setupOrientationGate();
     this.tryLockLandscape();
   }
@@ -507,7 +515,10 @@ class GameApp {
     this.menuScreen = name;
 
     if (name === 'start') {
+      // 干员卡片在前，两个主按钮在后；左右选干员，上下进出按钮区
+      const cards = Array.from(document.querySelectorAll('#characterGrid .character-card'));
       this.menuItems = [
+        ...cards,
         document.getElementById('startBtn'),
         document.getElementById('levelSelectBtn')
       ];
@@ -562,6 +573,7 @@ class GameApp {
     const n = this.menuItems.length;
     // 关卡选择是 2 列网格，用空间导航更直观：左右 ±1（列），上下 ±2（行）；越界夹取不动
     const isGrid = name === 'levelSelect';
+    const cardCount = name === 'start' ? this.characterCardEls.size : 0;
     let delta = 0;
     if (input.navRight) delta = 1;
     else if (input.navLeft) delta = -1;
@@ -570,7 +582,26 @@ class GameApp {
 
     if (delta !== 0) {
       let next = this.menuIndex + delta;
-      if (isGrid) {
+      if (name === 'start' && cardCount > 0) {
+        if (this.menuIndex < cardCount) {
+          // 干员行内左右环绕，上下进入按钮区
+          if (input.navUp) next = this.menuIndex;
+          else if (input.navDown) next = cardCount;
+          else next = (this.menuIndex + (input.navRight ? 1 : -1) + cardCount) % cardCount;
+        } else {
+          const btnCount = n - cardCount;
+          if (input.navLeft || input.navRight) {
+            next = this.menuIndex;
+          } else if (input.navUp && this.menuIndex === cardCount) {
+            // 从「开始游戏」回到当前干员卡片，而不是绕到最后一个按钮
+            const activeIndex = [...this.characterCardEls.keys()].indexOf(this.characterId);
+            next = activeIndex >= 0 ? activeIndex : cardCount - 1;
+          } else {
+            const pos = (this.menuIndex - cardCount + (input.navDown ? 1 : -1) + btnCount) % btnCount;
+            next = cardCount + pos;
+          }
+        }
+      } else if (isGrid) {
         if (next < 0 || next > n - 1) next = this.menuIndex;
       } else {
         next = (next + n) % n;
@@ -614,6 +645,11 @@ class GameApp {
     }
 
     this.menuIndex = 0;
+    if (screenName === 'start') {
+      // 回到主菜单时把焦点放回当前干员，方便直接换人或开始
+      const activeIndex = [...this.characterCardEls.keys()].indexOf(this.characterId);
+      if (activeIndex >= 0) this.menuIndex = activeIndex;
+    }
     this.refreshMenuItems();
     this.updatePadLegend();
   }
@@ -843,7 +879,12 @@ class GameApp {
 
   updateLives(lives) {
     this.hud.lives.innerHTML = '';
-    for (let i = 0; i < GameConfig.PLAYER.lives; i++) {
+    const profile = (GameConfig.CHARACTERS || []).find((c) => c.id === this.game.characterId);
+    if (profile && profile.color) {
+      this.hud.lives.style.setProperty('--life-color', profile.color);
+    }
+    const maxLives = this.game.maxLives || GameConfig.PLAYER.lives;
+    for (let i = 0; i < maxLives; i++) {
       const life = document.createElement('div');
       life.className = 'life-icon' + (i >= lives ? ' empty' : '');
       this.hud.lives.appendChild(life);
@@ -852,6 +893,123 @@ class GameApp {
 
   updateEnemyCount(count) {
     this.hud.enemyCount.textContent = count;
+  }
+
+  // —— 干员选择 ——
+  renderCharacterCards() {
+    if (!this.characterGrid) return;
+    const chars = GameConfig.CHARACTERS || [];
+    this.characterGrid.innerHTML = '';
+    this.characterCardEls.clear();
+
+    for (const c of chars) {
+      const card = document.createElement('div');
+      card.className = 'character-card';
+      card.dataset.charId = c.id;
+      card.style.setProperty('--char-color', c.color || '#3ee6ff');
+      card.setAttribute('role', 'button');
+      card.setAttribute('tabindex', '0');
+
+      const portrait = document.createElement('div');
+      portrait.className = 'char-portrait';
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      portrait.appendChild(canvas);
+
+      const weaponId = c.startWeapons?.[0]?.id;
+      const weaponCfg = weaponId
+        ? GameConfig.WEAPONS.find((w) => w.id === weaponId)
+        : null;
+
+      const nameRow = document.createElement('div');
+      nameRow.className = 'char-name-row';
+      nameRow.innerHTML = `<span class="char-name">${c.name}</span><span class="char-code">${c.code || ''}</span>`;
+
+      const trait = document.createElement('div');
+      trait.className = 'char-trait';
+      trait.textContent = c.trait || '';
+
+      const desc = document.createElement('div');
+      desc.className = 'char-desc';
+      desc.textContent = c.desc || '';
+
+      const stats = document.createElement('div');
+      stats.className = 'char-stats';
+      stats.innerHTML = `
+        <span class="char-stat"><b>${c.lives}</b>生命</span>
+        <span class="char-stat"><b>${(c.speed ?? GameConfig.PLAYER.speed).toFixed(2)}</b>移速</span>
+        <span class="char-stat"><b>${weaponCfg ? weaponCfg.name : '手枪'}</b>初始</span>
+      `;
+
+      card.append(portrait, nameRow, trait, desc, stats);
+      card.addEventListener('click', () => this.selectCharacter(c.id));
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.selectCharacter(c.id);
+        }
+      });
+
+      this.characterGrid.appendChild(card);
+      this.characterCardEls.set(c.id, { card, canvas });
+    }
+
+    this.applyCharacterSelection();
+  }
+
+  // 素材加载完成后，把待机首帧画进卡片头像
+  drawCharacterPortraits() {
+    const sprites = getSprites();
+    for (const [id, refs] of this.characterCardEls) {
+      const profile = (GameConfig.CHARACTERS || []).find((c) => c.id === id);
+      const sheet = sprites[(profile && profile.sheet) || 'player'];
+      if (!sheet || !refs.canvas) continue;
+
+      const ctx = refs.canvas.getContext('2d');
+      ctx.clearRect(0, 0, refs.canvas.width, refs.canvas.height);
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.scale(2, 2);
+      sheet.draw(ctx, 0, 32, 63, 1);
+      ctx.restore();
+    }
+  }
+
+  selectCharacter(id) {
+    if (!this.game.setCharacter(id)) return;
+    this.characterId = id;
+    this.saveCharacter(id);
+    this.applyCharacterSelection();
+    this.game.sfx.click();
+  }
+
+  applyCharacterSelection() {
+    for (const [id, refs] of this.characterCardEls) {
+      const active = id === this.characterId;
+      refs.card.classList.toggle('active', active);
+      refs.card.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+  }
+
+  loadCharacter() {
+    try {
+      const saved = localStorage.getItem('mecha_game_character');
+      if (saved && (GameConfig.CHARACTERS || []).some((c) => c.id === saved)) {
+        return saved;
+      }
+    } catch (e) {
+      console.log('Failed to load character');
+    }
+    return 'viktor';
+  }
+
+  saveCharacter(id) {
+    try {
+      localStorage.setItem('mecha_game_character', id);
+    } catch (e) {
+      console.log('Failed to save character');
+    }
   }
 
   renderLevelGrid() {

@@ -50,7 +50,9 @@ export class Game {
     this.state = GameState.MENU;
     this.currentLevel = 1;
     this.score = 0;
-    this.lives = GameConfig.PLAYER.lives;
+    this.characterId = 'viktor';
+    this.maxLives = GameConfig.PLAYER.lives;
+    this.lives = this.maxLives;
     this.totalKills = 0;
 
     this.level = null;
@@ -174,9 +176,14 @@ export class Game {
     this.sceneRenderer.setLevel(this.level.id, this.level.worldWidth);
     this.currentLevel = levelNumber;
 
+    const character = (GameConfig.CHARACTERS || []).find((c) => c.id === this.characterId)
+      || (GameConfig.CHARACTERS || [])[0];
+    this.characterId = character ? character.id : 'viktor';
+    this.maxLives = character?.lives ?? GameConfig.PLAYER.lives;
+
     this.state = GameState.PLAYING;
     this.score = 0;
-    this.lives = GameConfig.PLAYER.lives;
+    this.lives = this.maxLives;
     this.totalKills = 0;
     this.bullets = [];
     this.grenades = [];
@@ -212,7 +219,7 @@ export class Game {
     this.whiteFlash = 0;
     this.cameraX = clamp(this.level.playerSpawn.x - this.logicalW * 0.4, 0, this.level.worldWidth - this.logicalW);
 
-    this.player = new Player(this.level.playerSpawn.x);
+    this.player = new Player(this.level.playerSpawn.x, this.characterId);
     // 敌人按遭遇波次生成，不再开场全量铺满
     this.enemies = [];
 
@@ -233,6 +240,14 @@ export class Game {
       this._lastRemaining = remaining;
       if (this.onEnemyCountChange) this.onEnemyCountChange(remaining);
     }
+  }
+
+  setCharacter(id) {
+    const found = (GameConfig.CHARACTERS || []).find((c) => c.id === id);
+    if (!found) return false;
+    this.characterId = found.id;
+    this.maxLives = found.lives;
+    return true;
   }
 
   pause() {
@@ -340,15 +355,15 @@ export class Game {
       const fire = p.tryFire(this.currentTime);
       if (fire) {
         const w = fire.weapon;
-        const b = p.createBullet(w);
-        this.bullets.push(b);
-        this.shotsFired++;
+        const bullets = p.createBullets(w);
+        for (const b of bullets) this.bullets.push(b);
+        this.shotsFired += bullets.length;
         // 枪口特效对准精灵里的实际枪管位置
         const muzzle = p.getMuzzle();
         this.effectSystem.muzzleFlash(muzzle.x, muzzle.y, p.facing, w.muzzleScale || 0.5, w.muzzleTint || null);
-        if (w.bulletStyle === 'plasma') {
-          // 等离子不抛壳，改喷一圈绿色粒子
-          this.particleSystem.createExplosion(muzzle.x, muzzle.y, w.color, 5);
+        if (w.bulletStyle === 'plasma' || w.bulletStyle === 'rail') {
+          // 能量武器不抛壳，改喷一圈同色粒子
+          this.particleSystem.createExplosion(muzzle.x, muzzle.y, w.color, w.bulletStyle === 'rail' ? 8 : 5);
         } else {
           this.effectSystem.shell(muzzle.x - p.facing * 4, muzzle.y, p.facing * 1.5, -1.5);
         }
@@ -522,7 +537,7 @@ export class Game {
       if (!aabb(pb, rect)) continue;
       cp.used = true;
       cp.usedAt = this.currentTime;
-      if (this.lives < GameConfig.PLAYER.lives) {
+      if (this.lives < this.maxLives) {
         this.lives++;
         if (this.onLivesChange) this.onLivesChange(this.lives);
         this.showPickupToast('检查点 · 生命 +1', '#39ff88');
@@ -572,7 +587,8 @@ export class Game {
           break;
         }
 
-        const died = e.takeDamage(GameConfig.MELEE.damage);
+        const meleeDamage = Math.max(1, Math.round(GameConfig.MELEE.damage * (p.meleeMultiplier || 1)));
+        const died = e.takeDamage(meleeDamage);
         // 血溅 + 白色冲击闪光 + 短促顿帧
         this.effectSystem.blood(hx, hy);
         this.effectSystem.hitSparks(hx, hy);
@@ -644,19 +660,25 @@ export class Game {
       for (let j = 0; j < this.enemies.length; j++) {
         const e = this.enemies[j];
         if (e.dead) continue;
+        if (b.hitSet.has(e)) continue;
         if (aabb(bb, e.getBounds())) {
-          b.active = false;
           const hx = b.x + b.width / 2;
           const hy = b.y + b.height / 2;
 
           // 盾墙形态：正面子弹被能量盾弹开，必须等收招后的核心窗口
           if (e === this.boss && e.isFrontShielded && e.isFrontShielded()) {
+            b.active = false;
             this.effectSystem.hitSparks(hx, hy);
             this.particleSystem.createExplosion(hx, hy, '#ff5a8a', 7);
             this.addHitStop(18);
             this.sfx.click();
             return;
           }
+
+          b.hitSet.add(e);
+          const canPierce = b.pierce > 0;
+          if (canPierce) b.pierce--;
+          else b.active = false;
 
           this.shotsHit++;
           const prevPhase = e === this.boss ? e.phase : 0;
@@ -679,6 +701,7 @@ export class Game {
           }
           if (died) this.killEnemy(e);
           if (b.splashRadius > 0) this.applySplash(b, hx, hy, e);
+          if (canPierce) continue;
           return;
         }
       }
@@ -1438,7 +1461,7 @@ export class Game {
     this.sfx.pickup();
 
     if (pickup.type === 'health') {
-      if (this.lives < GameConfig.PLAYER.lives) {
+      if (this.lives < this.maxLives) {
         this.lives++;
         if (this.onLivesChange) this.onLivesChange(this.lives);
         this.showPickupToast('医疗包 +1 生命', '#ff5a6e');
@@ -1558,7 +1581,7 @@ export class Game {
     // Boss 门禁检查点：进门前补 1 点生命，避免长血条战斗被残血卡死
     if (!this.bossDoorHealed) {
       this.bossDoorHealed = true;
-      if (this.lives < GameConfig.PLAYER.lives) {
+      if (this.lives < this.maxLives) {
         this.lives++;
         if (this.onLivesChange) this.onLivesChange(this.lives);
         this.showPickupToast('Boss 门禁 · 生命 +1', '#39ff88');
@@ -2483,6 +2506,31 @@ export class Game {
       ctx.fillStyle = color;
       ctx.fillRect(x, y + 1, 2, 1);
       ctx.fillRect(x + 9, y + 1, 2, 1);
+    } else if (weapon.id === 'shotgun') {
+      ctx.fillRect(x, y + 2, 11, 2);
+      ctx.fillRect(x, y + 5, 11, 1);
+      ctx.fillStyle = '#7a4522';
+      ctx.fillRect(x + 2, y + 4, 4, 2);
+      ctx.fillStyle = '#fff0d6';
+      ctx.fillRect(x, y + 2, 10, 1);
+      ctx.fillStyle = color;
+      ctx.fillRect(x + 9, y + 6, 2, 1);
+    } else if (weapon.id === 'smg') {
+      ctx.fillRect(x, y + 2, 8, 3);
+      ctx.fillRect(x + 7, y + 3, 4, 1);
+      ctx.fillRect(x + 2, y + 4, 2, 4);
+      ctx.fillRect(x + 5, y + 5, 1, 2);
+      ctx.fillStyle = '#f0dcff';
+      ctx.fillRect(x, y + 2, 7, 1);
+    } else if (weapon.id === 'rail') {
+      ctx.fillRect(x, y + 2, 12, 2);
+      ctx.fillRect(x, y + 5, 12, 1);
+      ctx.fillStyle = '#f2dcff';
+      ctx.fillRect(x + 2, y + 3, 8, 1);
+      ctx.fillStyle = '#d9a6ff';
+      ctx.fillRect(x, y + 1, 2, 1);
+      ctx.fillRect(x + 9, y + 1, 2, 1);
+      ctx.fillRect(x + 4, y + 6, 4, 1);
     } else {
       ctx.fillRect(x, y + 1, 8, 2);
       ctx.fillRect(x + 1, y + 3, 3, 4);

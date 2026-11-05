@@ -113,6 +113,20 @@ const P = {
     accent: '#3ee6ff', accent2: '#ff2e88',
     boot: '#101a22', metal: '#7893a3', gun: '#1a2732', gunLight: '#536d7e',
   },
+  mira: {
+    skin: '#d6a07f', skinShade: '#955e47',
+    coat: '#2a1b3d', coatShade: '#130a1d', coatLight: '#553373',
+    armor: '#372a4d', armorLight: '#8c6cb5', armorShade: '#1d1429',
+    accent: '#c77dff', accent2: '#5fe6ff',
+    boot: '#120c1a', metal: '#9a86b0', gun: '#1d1426', gunLight: '#6d5684',
+  },
+  tetsu: {
+    skin: '#c08a63', skinShade: '#7f4e35',
+    coat: '#3a2b1d', coatShade: '#1a110a', coatLight: '#6e5234',
+    armor: '#4b3a24', armorLight: '#a07d45', armorShade: '#251a0f',
+    accent: '#ff8a3d', accent2: '#ffe066',
+    boot: '#140f09', metal: '#a08a63', gun: '#231a10', gunLight: '#75603f',
+  },
   mohawk: {
     skin: '#c98863', skinShade: '#8a4a32',
     coat: '#3a2320', coatShade: '#1c0f0e', coatLight: '#6a3b31',
@@ -482,6 +496,49 @@ function drawHead(ctx, spec, x, cy, lean, bob) {
       }
       rect(ctx, hx - rx, hy, rx * 2, 3, OUT);
       rect(ctx, hx - rx + 1, hy, rx * 2 - 2, 2, c.accent2);
+      break;
+    }
+    case 'mira': {
+      ellipseO(ctx, hx, hy, rx, ry, c.skin);
+      // 紫色短发 + 侧马尾，剪影和维克明显不同
+      polyO(ctx, [
+        [hx - rx - 1, hy - 1], [hx - rx, hy - ry - 2],
+        [hx + rx - 1, hy - ry - 2], [hx + rx, hy - 2],
+        [hx + rx - 2, hy - 4], [hx - rx + 1, hy - 4],
+      ], c.coatLight);
+      rect(ctx, hx - rx - 4, hy - 3, 4, 7, c.coatShade);
+      rect(ctx, hx - rx - 5, hy + 2, 3, 4, c.accent);
+      rect(ctx, hx - rx - 6, hy + 5, 2, 3, c.coatLight);
+      // 青色目镜
+      rect(ctx, hx - rx + 1, hy, rx * 2 - 2, 2, OUT);
+      rect(ctx, hx - rx + 2, hy, rx * 2 - 4, 1, c.accent2);
+      rect(ctx, hx + 1, hy, 2, 1, '#ffffff');
+      // 高领围巾
+      rect(ctx, hx - 4, hy + 5, 9, 3, OUT);
+      rect(ctx, hx - 4, hy + 5, 8, 2, c.accent);
+      break;
+    }
+    case 'tetsu': {
+      ellipseO(ctx, hx, hy, rx + 1, ry + 1, c.skin);
+      // 方下巴络腮胡
+      polyO(ctx, [
+        [hx - rx - 1, hy + 1], [hx - rx, hy + ry + 3],
+        [hx + rx, hy + ry + 3], [hx + rx + 1, hy + 1],
+      ], '#2a1a10');
+      // 重装头盔 + 铆钉
+      polyO(ctx, [
+        [hx - rx - 1, hy - 1], [hx - rx, hy - ry - 3],
+        [hx + rx, hy - ry - 3], [hx + rx + 1, hy - 1],
+        [hx + rx - 2, hy + 1], [hx - rx + 2, hy + 1],
+      ], c.armor);
+      rect(ctx, hx - rx, hy - ry - 1, rx * 2 + 1, 1, c.armorLight);
+      rect(ctx, hx - rx + 1, hy - ry - 3, 2, 2, c.metal);
+      rect(ctx, hx + rx - 2, hy - ry - 3, 2, 2, c.metal);
+      // 橙色眼缝
+      rect(ctx, hx - rx + 1, hy, rx * 2 - 2, 2, OUT);
+      rect(ctx, hx - rx + 2, hy, rx * 2 - 4, 1, c.accent);
+      rect(ctx, hx + 2, hy, 2, 1, '#ffffff');
+      rect(ctx, hx - 3, hy + 4, 7, 1, c.armorShade);
       break;
     }
     default:
@@ -1046,6 +1103,14 @@ const SPECS = {
     colors: P.player, head: 'player', weapon: 'rifle', bulk: 1,
     backpack: true, coatTails: true, armorChest: true, pauldron: true, twoHand: true,
   },
+  player_mira: {
+    colors: P.mira, head: 'mira', weapon: 'smg', bulk: 0,
+    coatTails: true, armorChest: true, twoHand: true,
+  },
+  player_tetsu: {
+    colors: P.tetsu, head: 'tetsu', weapon: 'shotgun', bulk: 2,
+    backpack: true, armorChest: true, pauldron: true, twoHand: true,
+  },
   thug_mohawk: {
     colors: P.mohawk, head: 'mohawk', weapon: 'pistol', bulk: 1,
     armorChest: true, twoHand: false,
@@ -1322,9 +1387,16 @@ function renderBossSheet(name, spec) {
 }
 
 fs.mkdirSync(ASSETS, { recursive: true });
-renderHumanSheet('player', SPECS.player);
+const only = process.argv.slice(2);
+const wanted = only.length ? new Set(only) : null;
+const matches = (name) => !wanted || wanted.has(name);
+
+if (matches('player')) renderHumanSheet('player', SPECS.player);
+if (matches('player_mira')) renderHumanSheet('player_mira', SPECS.player_mira);
+if (matches('player_tetsu')) renderHumanSheet('player_tetsu', SPECS.player_tetsu);
 for (const [name, spec] of Object.entries(SPECS)) {
-  if (name === 'player') continue;
+  if (name === 'player' || name === 'player_mira' || name === 'player_tetsu') continue;
+  if (!matches(name)) continue;
   renderEnemySheet(name, spec);
 }
 for (const [name, spec] of Object.entries(BOSS_SPECS)) {

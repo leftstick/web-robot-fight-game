@@ -4,6 +4,8 @@
 export const ASSETS = {
   // 角色精灵图（PNG + Aseprite JSON）
   player: { png: 'assets/player.png', json: 'assets/player.json' },
+  player_mira: { png: 'assets/player_mira.png', json: 'assets/player_mira.json' },
+  player_tetsu: { png: 'assets/player_tetsu.png', json: 'assets/player_tetsu.json' },
   thug_mohawk: { png: 'assets/thug_mohawk.png', json: 'assets/thug_mohawk.json' },
   thug_mask: { png: 'assets/thug_mask.png', json: 'assets/thug_mask.json' },
   thug_bald: { png: 'assets/thug_bald.png', json: 'assets/thug_bald.json' },

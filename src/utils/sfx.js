@@ -94,6 +94,24 @@ export class Sfx {
       this._tone({ freq: 880, slideTo: 120, type: 'triangle', dur: 0.15, vol: 0.1 });
       return;
     }
+    if (kind === 'shotgun') {
+      // 霰弹：低频冲击 + 宽频噪声
+      this._tone({ freq: 180, slideTo: 60, type: 'square', dur: 0.16, vol: 0.22 });
+      this._noise({ dur: 0.18, vol: 0.18, cutoff: 1800 });
+      return;
+    }
+    if (kind === 'smg') {
+      // 冲锋枪：极短促的高频 crack
+      this._tone({ freq: 1500, slideTo: 620, type: 'square', dur: 0.03, vol: 0.08 });
+      this._noise({ dur: 0.025, vol: 0.04, cutoff: 4200 });
+      return;
+    }
+    if (kind === 'rail') {
+      // 磁轨炮：蓄能上滑 + 放电下坠
+      this._tone({ freq: 320, slideTo: 1800, type: 'triangle', dur: 0.09, vol: 0.14 });
+      this._tone({ freq: 1200, slideTo: 90, type: 'sawtooth', dur: 0.28, vol: 0.18 });
+      return;
+    }
     this._tone({ freq: 900, slideTo: 300, type: 'square', dur: 0.07, vol: 0.16 });
   }
 

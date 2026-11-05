@@ -78,7 +78,7 @@
       { "x": 2950, "w": 74, "type": "steam" }
     ],
     "secrets": [
-      { "x": 1010, "type": "vending", "loot": "rifle", "hp": 8 }
+      { "x": 1010, "type": "vending", "loot": "shotgun", "hp": 8 }
     ],
     "boss": { "x": 4600, "hp": 100, "name": "铁拳·维克", "title": "GANG LORD // 街区霸主" }
   },
@@ -163,7 +163,7 @@
       { "x": 2700, "w": 74, "type": "crane" }
     ],
     "secrets": [
-      { "x": 880, "type": "vending", "loot": "rifle", "hp": 8 }
+      { "x": 880, "type": "vending", "loot": "smg", "hp": 8 }
     ],
     "boss": { "x": 4400, "hp": 135, "name": "码头屠夫", "title": "DOCKMASTER // 码头之主" }
   },
@@ -267,7 +267,7 @@
     ],
     "secrets": [
       { "x": 850, "type": "vending", "loot": "rifle", "hp": 8 },
-      { "x": 4300, "type": "vending", "loot": "plasma", "hp": 10 }
+      { "x": 4300, "type": "vending", "loot": "rail", "hp": 10 }
     ],
     "boss": { "x": 5220, "hp": 170, "name": "教父·卡洛", "title": "CRIME LORD // 帮派教父" }
   },
@@ -370,7 +370,7 @@
       { "x": 3860, "w": 84, "type": "rail" }
     ],
     "secrets": [
-      { "x": 900, "type": "vending", "loot": "rifle", "hp": 8 },
+      { "x": 900, "type": "vending", "loot": "smg", "hp": 8 },
       { "x": 4380, "type": "vending", "loot": "plasma", "hp": 10 }
     ],
     "boss": { "x": 5400, "hp": 200, "name": "电闸·雷诺", "title": "RAIL BARON // 高架车王" }
