@@ -12,6 +12,7 @@ function createState() {
     moveLeft: false,
     moveRight: false,
     jump: false,          // 脉冲信号：按下那一帧为 true
+    dash: false,          // 脉冲信号：冲刺/滑铲
     shoot: false,         // 持续信号：按住持续 true
     crouch: false,
     switchWeapon: false,  // 脉冲信号
@@ -64,7 +65,7 @@ export class InputManager {
 
     // 脉冲信号的上帧状态（跨来源统一做边沿检测）
     this._prev = {
-      jump: false, switchWeapon: false, pause: false, grenade: false, melee: false,
+      jump: false, dash: false, switchWeapon: false, pause: false, grenade: false, melee: false,
       navUp: false, navDown: false, navLeft: false, navRight: false, confirm: false,
     };
 
@@ -178,10 +179,11 @@ export class InputManager {
     return (set && set.size > 0) || !!this.touchEdge[action];
   }
 
-  // —— 虚拟摇杆：按下抓取，拖动产生模拟量，抬起归中 ——
+  // —— 虚拟摇杆：按下处生成浮动底座，拖动产生模拟量，抬起归中 ——
   bindTouchStick(el) {
     if (!el) return;
     this.stickEl = el;
+    this.stickBase = el.querySelector('.tc-stick-base');
     this.stickKnob = el.querySelector('.tc-stick-knob');
 
     el.addEventListener('pointerdown', (e) => {
@@ -191,7 +193,9 @@ export class InputManager {
       if (el.setPointerCapture) {
         try { el.setPointerCapture(e.pointerId); } catch (_) { /* 忽略 */ }
       }
-      const r = el.getBoundingClientRect();
+      // 底座跟随按下的位置（限制在摇杆热区内），再从底座实测中心/半径
+      this._placeStickBase(e.clientX, e.clientY);
+      const r = (this.stickBase || el).getBoundingClientRect();
       this.stickCenter = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
       this.stickRadius = Math.max(1, Math.min(r.width, r.height) * 0.34);
       this.stickBasis = this._measureStickBasis(el);
@@ -214,6 +218,22 @@ export class InputManager {
     el.addEventListener('pointercancel', release);
     el.addEventListener('lostpointercapture', release);
     el.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  // 把浮动底座定位到触摸点（相对热区的本地坐标，留出半径 + 边距）
+  _placeStickBase(clientX, clientY) {
+    const zone = this.stickEl;
+    const base = this.stickBase;
+    if (!zone || !base) return;
+    const zr = zone.getBoundingClientRect();
+    const br = base.getBoundingClientRect();
+    const halfW = (br.width || 132) / 2;
+    const halfH = (br.height || 132) / 2;
+    const margin = 6;
+    const x = Math.max(halfW + margin, Math.min(zr.width - halfW - margin, clientX - zr.left));
+    const y = Math.max(halfH + margin, Math.min(zr.height - halfH - margin, clientY - zr.top));
+    base.style.left = `${x}px`;
+    base.style.top = `${y}px`;
   }
 
   // 实测「摇杆本地坐标轴」在屏幕上的实际方向。
@@ -280,6 +300,11 @@ export class InputManager {
     this.stickVec.x = 0;
     this.stickVec.y = 0;
     if (this.stickEl) this.stickEl.classList.remove('active');
+    // 底座回到 CSS 默认位置，下次按下再跟随手指
+    if (this.stickBase) {
+      this.stickBase.style.left = '';
+      this.stickBase.style.top = '';
+    }
     if (this.stickKnob) this.stickKnob.style.transform = 'translate(-50%, -50%)';
   }
 
@@ -297,6 +322,8 @@ export class InputManager {
     const kbAim = !!kb['ShiftLeft'] || !!kb['ShiftRight'];
     const kbJump = !!kb['ArrowUp'] || !!kb['KeyW'] || !!kb['KeyK'] ||
                    !!jp['ArrowUp'] || !!jp['KeyW'] || !!jp['KeyK'];
+    const kbDash = !!kb['KeyC'] || !!kb['ControlLeft'] ||
+                   !!jp['KeyC'] || !!jp['ControlLeft'];
     const kbSwitch = !!kb['KeyL'] || !!kb['KeyQ'] || !!kb['KeyE'] || !!kb['Tab'] ||
                      !!jp['KeyL'] || !!jp['KeyQ'] || !!jp['KeyE'] || !!jp['Tab'];
     const kbPause = !!kb['Escape'] || !!kb['KeyP'] || !!jp['Escape'] || !!jp['KeyP'];
@@ -311,6 +338,9 @@ export class InputManager {
     const touchCrouch = this._touchIsDown('crouch');
     const touchSwitch = this._touchIsDown('switch');
     const touchAim = this._touchIsDown('aim');
+    const touchDash = this._touchIsDown('dash');
+    const touchGrenade = this._touchIsDown('grenade');
+    const touchMelee = this._touchIsDown('melee');
 
     // —— 触屏虚拟摇杆（左下角模拟摇杆）——
     const sv = this.stickVec;
@@ -331,7 +361,7 @@ export class InputManager {
     let padLeft = false, padRight = false, padCrouch = false, padJump = false,
         padShoot = false, padSwitch = false, padAim = false, padMelee = false,
         padNavUp = false, padNavDown = false, padNavLeft = false, padNavRight = false,
-        padConfirm = false, padBack = false, padGrenade = false, padPause = false;
+        padConfirm = false, padBack = false, padGrenade = false, padPause = false, padDash = false;
     const pad = this.pad;
     if (pad) {
       const ax = pad.axes || [];
@@ -352,6 +382,7 @@ export class InputManager {
       padGrenade = btn(4);                                     // LB 手雷
       padMelee = btn(11);                                      // R3 近战劈砍
       padPause = btn(9);                                       // Start 暂停
+      padDash = btn(10);                                        // L3 冲刺
 
       // 菜单导航：D-pad(12/13/14/15) 或左摇杆（>0.5 视为方向），A(0) 确认
       const navDirX = sx > 0.5 ? 1 : (sx < -0.5 ? -1 : 0);
@@ -377,6 +408,10 @@ export class InputManager {
     s.jump = heldJump && !this._prev.jump;
     this._prev.jump = heldJump;
 
+    const heldDash = kbDash || touchDash || padDash;
+    s.dash = heldDash && !this._prev.dash;
+    this._prev.dash = heldDash;
+
     const heldSwitch = kbSwitch || touchSwitch || padSwitch;
     s.switchWeapon = heldSwitch && !this._prev.switchWeapon;
     this._prev.switchWeapon = heldSwitch;
@@ -385,12 +420,12 @@ export class InputManager {
     s.pause = heldPause && !this._prev.pause;
     this._prev.pause = heldPause;
 
-    const heldGrenade = kbGrenade || padGrenade;
+    const heldGrenade = kbGrenade || touchGrenade || padGrenade;
     s.grenade = heldGrenade && !this._prev.grenade;
     this._prev.grenade = heldGrenade;
 
     // 近战劈砍：键盘 X / 手柄 R3，脉冲信号
-    const heldMelee = kbMelee || padMelee;
+    const heldMelee = kbMelee || touchMelee || padMelee;
     s.melee = heldMelee && !this._prev.melee;
     this._prev.melee = heldMelee;
 
@@ -424,13 +459,14 @@ export class InputManager {
 
     // —— 记录最近使用的输入设备，HUD 按键提示据此切换 ——
     const padActive = padLeft || padRight || padCrouch || padJump || padShoot ||
-                      padSwitch || padAim || padConfirm || padBack || padGrenade ||
+                      padSwitch || padAim || padConfirm || padBack || padGrenade || padDash ||
                       padNavUp || padNavDown || padNavLeft || padNavRight || padPause;
     const touchActive = touchLeft || touchRight || touchJump || touchShoot ||
-                        touchCrouch || touchSwitch || touchAim ||
+                        touchCrouch || touchSwitch || touchAim || touchDash ||
+                        touchGrenade || touchMelee ||
                         stickLeft || stickRight || stickUp || stickDown;
     const kbActive = kbLeft || kbRight || kbCrouch || kbShoot || kbAim || kbJump ||
-                     kbSwitch || kbPause || kbGrenade || kbNavUp || kbNavDown ||
+                     kbSwitch || kbPause || kbGrenade || kbDash || kbNavUp || kbNavDown ||
                      kbNavLeft || kbNavRight || kbConfirm || kbBack;
     if (padActive) this.lastDevice = 'pad';
     else if (touchActive) this.lastDevice = 'touch';

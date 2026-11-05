@@ -7,6 +7,10 @@ function aabb(a, b) {
          a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
+function clampNum(v, min, max) {
+  return v < min ? min : (v > max ? max : v);
+}
+
 // 兵种色标：头顶菱形，让玩家一眼分清优先处理谁
 const ARCHETYPE_COLORS = {
   rusher: '#ff2e4a',
@@ -49,6 +53,7 @@ class EnemyBase {
 
     this.archetype = null;   // rusher | gunner | sniper，普通暴徒为 null
     this.elite = false;
+    this.isBoss = false;
   }
 
   // 精英化：更硬、分更高，外观由 draw 里的金色光环体现
@@ -117,17 +122,17 @@ class EnemyBase {
   }
 
   getGunHeight() {
-    if (this.sheetKey === 'boss') return 31;
-    return this.crouching ? 15 : 28;
+    if (this.isBoss) return 31;
+    // 精灵里枪管中心线在脚底上方 30px（站立）/ 18px（蹲伏）
+    return this.crouching ? 14 : 26;
   }
 
   // 与精灵中的枪管对齐；贴掩体时从掩体前沿伸出。
   getMuzzle() {
     const cx = this.getCenterX();
     const y = this.y + this.getGunHeight();
-    let offset;
-    if (this.sheetKey === 'boss') offset = 56;
-    else offset = this.crouching ? 20 : (this.sheetKey === 'thug_mask' ? 24 : 22);
+    // 人形紧凑武器枪口在帧中心 +24；Boss 长武器在 +49
+    const offset = this.isBoss ? 49 : 24;
 
     let x = cx + this.facing * offset;
     if (this.cover && this.cover.hp > 0) {
@@ -190,23 +195,23 @@ class EnemyBase {
 
   pickFrame(t) {
     if (this.dead) {
-      const f = this.sheetKey === 'boss' ? ANIM.BOSS_DEATH : ANIM.THUG_DEATH;
+      const f = this.isBoss ? ANIM.BOSS_DEATH : ANIM.THUG_DEATH;
       const idx = Math.min(f.length - 1, Math.floor(this.deathTime / 80));
       return f[idx];
     }
     if (this.crouching) {
-      return this.sheetKey === 'boss' ? ANIM.BOSS_IDLE[0] : ANIM.THUG_CROUCH[0];
+      return this.isBoss ? ANIM.BOSS_IDLE[0] : ANIM.THUG_CROUCH[0];
     }
     if (t < this.shootAnimUntil) {
-      const f = this.sheetKey === 'boss' ? ANIM.BOSS_GATLING : ANIM.THUG_SHOOT;
+      const f = this.isBoss ? ANIM.BOSS_GATLING : ANIM.THUG_SHOOT;
       return f[Math.floor(t / 70) % f.length];
     }
-    if (!this.onGround) return this.sheetKey === 'boss' ? ANIM.BOSS_IDLE[0] : ANIM.THUG_IDLE[0];
+    if (!this.onGround) return this.isBoss ? ANIM.BOSS_IDLE[0] : ANIM.THUG_IDLE[0];
     if (this.vx !== 0) {
-      const f = this.sheetKey === 'boss' ? ANIM.BOSS_WALK : ANIM.THUG_WALK;
+      const f = this.isBoss ? ANIM.BOSS_WALK : ANIM.THUG_WALK;
       return f[Math.floor(this.animTime / 8) % f.length];
     }
-    const f = this.sheetKey === 'boss' ? ANIM.BOSS_IDLE : ANIM.THUG_IDLE;
+    const f = this.isBoss ? ANIM.BOSS_IDLE : ANIM.THUG_IDLE;
     return f[Math.floor(this.animTime / 24) % f.length];
   }
 
@@ -430,7 +435,7 @@ export class Thug extends EnemyBase {
 
 // 疾行者：不找掩体，贴脸后蓄力冲撞。冲撞可被跳跃或走位躲开。
 export class Rusher extends EnemyBase {
-  constructor(feetX, feetY, cfg = GameConfig.RUSHER, sheetKey = 'thug_mohawk', archetype = 'rusher') {
+  constructor(feetX, feetY, cfg = GameConfig.RUSHER, sheetKey = 'rusher', archetype = 'rusher') {
     super(cfg, sheetKey, feetX, feetY);
     this.archetype = archetype;
     this.chargeRgb = archetype === 'biker' ? '196, 107, 255' : '255, 46, 74';
@@ -541,7 +546,7 @@ export class Rusher extends EnemyBase {
 // 暴走族：疾行者的高速变体，前摇更短、冲撞更远，出没于高架关卡
 export class Biker extends Rusher {
   constructor(feetX, feetY) {
-    super(feetX, feetY, GameConfig.BIKER, 'thug_bald', 'biker');
+    super(feetX, feetY, GameConfig.BIKER, 'biker', 'biker');
   }
 
   draw(ctx, t) {
@@ -561,7 +566,7 @@ export class Biker extends Rusher {
 // 扫射兵：保持中距离，三连发点射，弹道带轻微散布
 export class Gunner extends EnemyBase {
   constructor(feetX, feetY) {
-    super(GameConfig.GUNNER, 'thug_mask', feetX, feetY);
+    super(GameConfig.GUNNER, 'gunner', feetX, feetY);
     this.archetype = 'gunner';
     this.burstLeft = 0;
     this.nextBurstAt = 0;
@@ -605,7 +610,7 @@ export class Gunner extends EnemyBase {
 // 重装喷子：推进到近距离后打一轮扇形霰弹，逼迫玩家拉开或跳上平台
 export class Heavy extends EnemyBase {
   constructor(feetX, feetY) {
-    super(GameConfig.HEAVY, 'thug_mohawk', feetX, feetY);
+    super(GameConfig.HEAVY, 'heavy', feetX, feetY);
     this.archetype = 'heavy';
     this.pelletsLeft = 0;
     this.nextPelletAt = 0;
@@ -649,7 +654,7 @@ export class Heavy extends EnemyBase {
 // 盾卫：正面举盾减伤，转身有迟滞；绕后、近战、爆炸都能无视盾牌
 export class Shield extends EnemyBase {
   constructor(feetX, feetY) {
-    super(GameConfig.SHIELD, 'thug_mask', feetX, feetY);
+    super(GameConfig.SHIELD, 'shield', feetX, feetY);
     this.archetype = 'shield';
     this.turnAt = 0;
   }
@@ -740,7 +745,7 @@ export class Shield extends EnemyBase {
 // 狙击手：远距离蓄力瞄准，锁定后发射高速重弹；红线提示玩家躲闪
 export class Sniper extends EnemyBase {
   constructor(feetX, feetY) {
-    super(GameConfig.SNIPER, 'thug_bald', feetX, feetY);
+    super(GameConfig.SNIPER, 'sniper', feetX, feetY);
     this.archetype = 'sniper';
     this.aiming = false;
     this.aimUntil = 0;
@@ -853,7 +858,8 @@ export class Boss extends EnemyBase {
   constructor(feetX, feetY, hp, opts = {}) {
     // 关卡可通过 profile 覆盖弹速/节奏/召唤兵种，未覆盖的沿用默认值
     const cfg = { ...GameConfig.BOSS, ...(opts.profile || {}) };
-    super(cfg, 'boss', feetX, feetY);
+    super(cfg, opts.sheetKey || 'boss_steam', feetX, feetY);
+    this.isBoss = true;
     this.cfg = cfg;
     this.summonType = cfg.summonType || 'thug';
     if (hp) {
@@ -900,6 +906,24 @@ export class Boss extends EnemyBase {
     // 三阶段环形弹幕 / 召唤
     this.nextRadialAt = 0;
     this.pendingSummon = 0;
+
+    // —— 关卡招牌机制：前摇喊名 -> 场地机关 -> 核心暴露反击窗口 ——
+    this.signature = cfg.signature || 'steam';
+    this.signatureCfg = GameConfig.BOSS_SIGNATURES?.[this.signature] || null;
+    this.signatureState = 'idle';   // idle | windup | active | recover
+    this.signatureUntil = 0;
+    this.nextSignatureAt = 0;
+    this.signatureInit = false;
+    this.pendingCallout = null;
+    this.pendingSignatureEvent = null;
+    this.pendingPunish = false;
+    this.punishUntil = 0;
+    this.shielded = false;
+  }
+
+  // 前盾：只有盾卫型 Boss 在招牌技前摇/持续期间生效
+  isFrontShielded() {
+    return this.shielded && !this.dead;
   }
 
   get corePoint() {
@@ -963,6 +987,11 @@ export class Boss extends EnemyBase {
     this.nextAimAt = t + cfg.phaseInvuln + 400;
     this.chargeState = 'idle';
     this.slamState = 'idle';
+    // 阶段切换时打断招牌技，避免和阶段演出叠加
+    this.signatureState = 'idle';
+    this.shielded = false;
+    this.punishUntil = 0;
+    this.nextSignatureAt = t + cfg.phaseInvuln + 900;
   }
 
   consumeShockwave() {
@@ -975,6 +1004,133 @@ export class Boss extends EnemyBase {
     const n = this.pendingSummon;
     this.pendingSummon = 0;
     return n;
+  }
+
+  // —— 招牌机制状态机 ——
+  updateSignatureState(dtf, t, world, player) {
+    const cfg = this.signatureCfg;
+    if (!cfg) {
+      this.signatureState = 'idle';
+      return;
+    }
+
+    if (!this.signatureInit) {
+      this.signatureInit = true;
+      this.nextSignatureAt = t + 2200;
+    }
+
+    if (this.signatureState === 'idle') {
+      if (t >= this.nextSignatureAt) {
+        this.signatureState = 'windup';
+        this.signatureUntil = t + cfg.windup;
+        this.pendingCallout = {
+          name: cfg.callout,
+          kicker: cfg.kicker,
+          color: cfg.color,
+        };
+        this.shielded = this.signature === 'warden';
+        this.vx = 0;
+      }
+      return;
+    }
+
+    if (this.signatureState === 'windup') {
+      this.vx = 0;
+      if (t >= this.signatureUntil) {
+        this.signatureState = 'active';
+        this.signatureUntil = t + cfg.active;
+        this.pendingSignatureEvent = this.buildSignatureEvent(world, player);
+      }
+      return;
+    }
+
+    if (this.signatureState === 'active') {
+      this.vx = 0;
+      if (t >= this.signatureUntil) {
+        this.signatureState = 'recover';
+        this.signatureUntil = t + cfg.recover;
+        this.shielded = false;
+        if (cfg.punish > 0) {
+          this.punishUntil = t + cfg.punish;
+          this.coreOpen = true;
+          this.pendingPunish = true;
+        }
+      }
+      return;
+    }
+
+    // recover
+    this.vx *= 0.8;
+    if (t >= this.signatureUntil) {
+      this.signatureState = 'idle';
+      const speedUp = this.phase >= 3 ? 0.72 : (this.phase >= 2 ? 0.86 : 1);
+      this.nextSignatureAt = t + cfg.cooldown * speedUp;
+    }
+  }
+
+  // 生成场地机关描述，由 Game 负责实际生成/绘制/碰撞
+  buildSignatureEvent(world, player) {
+    const arena = world.arena || { x1: this.x - 220, x2: this.x + 220 };
+    const ground = GameConfig.GROUND_Y;
+    const pcx = player.x + player.width / 2;
+    const mycx = this.getCenterX();
+
+    if (this.signature === 'steam') {
+      const vents = [
+        clampNum(arena.x1 + 78, arena.x1 + 24, arena.x2 - 24),
+        clampNum(pcx, arena.x1 + 24, arena.x2 - 24),
+        clampNum(arena.x2 - 78, arena.x1 + 24, arena.x2 - 24),
+      ];
+      return { type: 'steam', x: mycx, vents };
+    }
+
+    if (this.signature === 'crane') {
+      const drops = [
+        clampNum(pcx - 62, arena.x1 + 30, arena.x2 - 30),
+        clampNum(pcx + 62, arena.x1 + 30, arena.x2 - 30),
+      ];
+      return { type: 'crane', x: mycx, drops };
+    }
+
+    if (this.signature === 'warden') {
+      return {
+        type: 'warden',
+        x1: arena.x1 + 10,
+        x2: arena.x2 - 10,
+        pulses: [
+          { start: 140, end: 620, low: true },
+          { start: 840, end: 1380, low: false },
+          { start: 1600, end: 2140, low: true },
+        ],
+      };
+    }
+
+    // rail：从 Boss 脚下向两侧各推出一道电涌，玩家起跳躲
+    return {
+      type: 'rail',
+      from: mycx,
+      dirs: [-1, 1],
+      x1: arena.x1 + 10,
+      x2: arena.x2 - 10,
+    };
+  }
+
+  consumeCallout() {
+    const c = this.pendingCallout;
+    this.pendingCallout = null;
+    return c;
+  }
+
+  consumeSignatureEvent() {
+    const ev = this.pendingSignatureEvent;
+    this.pendingSignatureEvent = null;
+    return ev;
+  }
+
+  consumePunish() {
+    if (!this.pendingPunish) return false;
+    this.pendingPunish = false;
+    return true;
   }
 
   phys(dtf, world) {
@@ -1001,6 +1157,22 @@ export class Boss extends EnemyBase {
     if (this.phaseTransitionUntil > t || this.controlLocked) {
       this.vx = 0;
       this.animTime += dtf * (this.controlLocked ? 0.35 : 1);
+      this.phys(dtf, world);
+      return null;
+    }
+
+    // 反击窗口结束：非三阶段时收起核心
+    if (this.punishUntil && t >= this.punishUntil) {
+      this.punishUntil = 0;
+      this.pendingPunish = false;
+      if (this.phase < 3) this.coreOpen = false;
+    }
+
+    // 招牌机制优先于普通攻击；期间站桩演出，不叠加点射/冲撞
+    this.updateSignatureState(dtf, t, world, player);
+    if (this.signatureState !== 'idle') {
+      this.vx *= 0.8;
+      this.animTime += dtf * (this.signatureState === 'windup' ? 0.5 : 1);
       this.phys(dtf, world);
       return null;
     }
@@ -1242,11 +1414,84 @@ export class Boss extends EnemyBase {
     return false;
   }
 
+  drawSignatureAura(ctx, t) {
+    const cfg = this.signatureCfg;
+    if (!cfg) return;
+    const c = this.corePoint;
+    const pulse = 0.5 + 0.5 * Math.sin(t / 60);
+    const rect = this.getBounds();
+    const rgb = cfg.color === '#7fe9ff' ? '127, 233, 255'
+      : cfg.color === '#ffb347' ? '255, 179, 71'
+      : cfg.color === '#ff5a8a' ? '255, 90, 138'
+      : '199, 125, 255';
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    // 蓄力：脚下能量环
+    if (this.signatureState === 'windup') {
+      const r = 18 + pulse * 12;
+      ctx.strokeStyle = `rgba(${rgb}, ${0.35 + pulse * 0.4})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(c.x, this.y + this.height - 1, r, r * 0.32, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(${rgb}, ${0.10 + pulse * 0.12})`;
+      ctx.beginPath();
+      ctx.ellipse(c.x, this.y + this.height - 1, r, r * 0.32, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 盾卫：正面能量盾
+    if (this.shielded) {
+      const frontX = this.facing > 0 ? rect.x + rect.width + 2 : rect.x - 2;
+      const top = this.y + 8;
+      const height = this.height - 12;
+      const grad = ctx.createLinearGradient(frontX, top, frontX, top + height);
+      grad.addColorStop(0, `rgba(${rgb}, 0.10)`);
+      grad.addColorStop(0.5, `rgba(${rgb}, ${0.30 + pulse * 0.12})`);
+      grad.addColorStop(1, `rgba(${rgb}, 0.12)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(frontX - 3, top, 6, height);
+      ctx.strokeStyle = `rgba(255, 220, 240, ${0.55 + pulse * 0.3})`;
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 3; i++) {
+        const yy = top + (height / 3) * i;
+        ctx.beginPath();
+        ctx.moveTo(frontX - 5, yy);
+        ctx.lineTo(frontX + 5, yy + 6);
+        ctx.stroke();
+      }
+    }
+
+    // 电涌：身体周围的电弧
+    if (this.signature === 'rail' && this.signatureState !== 'idle') {
+      ctx.strokeStyle = `rgba(${rgb}, ${0.45 + pulse * 0.4})`;
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 5; i++) {
+        const a = (t / 90 + i * 1.26) % (Math.PI * 2);
+        const x1 = c.x + Math.cos(a) * (16 + pulse * 6);
+        const y1 = c.y + Math.sin(a) * (28 + pulse * 8);
+        ctx.beginPath();
+        ctx.moveTo(Math.round(x1), Math.round(y1));
+        ctx.lineTo(Math.round(x1 + Math.cos(a + 1.4) * 6), Math.round(y1 + Math.sin(a + 1.4) * 6));
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+
   draw(ctx, t) {
     super.draw(ctx, t);
     if (this.dead) return;
 
     const c = this.corePoint;
+
+    // 招牌技前摇/护盾光环：让玩家一眼看出 Boss 正在憋大招
+    if (this.signatureState !== 'idle' || this.shielded) {
+      this.drawSignatureAura(ctx, t);
+    }
 
     // 点射预警：枪口充能 + 锁定弹道。红色平射蹲下躲，橙色压地起跳躲。
     if (this.aimState === 'telegraph') {

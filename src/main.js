@@ -3,20 +3,20 @@ import { LEVEL_META, GameConfig } from './config/gameConfig.js';
 
 // 按键提示文案：按当前设备切换，手柄连接时优先显示手柄按键
 const INPUT_HINTS = {
-  keyboard: '键盘：← → / A D 移动 · ↑ / W / K 跳 · ↓ / S 蹲 · 空格 / J 射击 · Q / L 切枪 · G 手雷 · X 劈砍',
-  pad: '手柄：左摇杆 / 十字键 移动 · A 跳 · X / RT 射击 · B 蹲 · Y / RB 切枪 · LT 瞄准 · LB 手雷 · R3 劈砍 · Start 暂停',
-  touch: '触屏：左摇杆 移动，下推蹲 · 右侧按钮 射击 / 跳 / 蹲 / 切枪',
+  keyboard: '键盘：← → / A D 移动 · ↑ / W / K 跳 · ↓ / S 蹲 · 空格 / J 射击 · C 冲刺 · Q / L 切枪 · G 手雷 · X 劈砍 · 蹲+跳 下板',
+  pad: '手柄：左摇杆 / 十字键 移动 · A 跳 · X / RT 射击 · B 蹲 · Y / RB 切枪 · LT 瞄准 · LB 手雷 · R3 劈砍 · L3 冲刺 · Start 暂停',
+  touch: '触屏：左半屏浮动摇杆 移动 / 下推蹲 · 右侧 射击 / 跳跃 / 冲刺 / 手雷 / 切枪 / 劈砍 · 摇杆下推+跳跃 下板',
   keyboardMenu: '菜单：方向键 选择 · 空格 / 回车 确认 · Backspace 返回',
   padMenu: '菜单：D-pad / 左摇杆 选择 · A 确认 · B 返回',
   // 游戏内提示分三行，短句更适合快速扫读；键名用 <b> 高亮
   keyboardLines: [
     '<b>A</b>/<b>D</b> 移动 <span class="sep">·</span> <b>W</b> 跳 <span class="sep">·</span> <b>S</b> 蹲',
-    '<b>空格</b> 射击 <span class="sep">·</span> <b>Q</b> 切枪 <span class="sep">·</span> <b>X</b> 劈砍',
-    '<b>G</b> 手雷 <span class="sep">·</span> <b>Esc</b> 暂停',
+    '<b>空格</b> 射击 <span class="sep">·</span> <b>C</b> 冲刺 <span class="sep">·</span> <b>Q</b> 切枪',
+    '<b>X</b> 劈砍 <span class="sep">·</span> <b>G</b> 手雷 <span class="sep">·</span> <b>Esc</b> 暂停',
   ],
   padLines: [
     '<b>左摇杆</b> 移动 <span class="sep">·</span> <b>A</b> 跳 <span class="sep">·</span> <b>B</b> 蹲',
-    '<b>X</b>/<b>RT</b> 射击 <span class="sep">·</span> <b>Y</b>/<b>RB</b> 切枪',
+    '<b>X</b>/<b>RT</b> 射击 <span class="sep">·</span> <b>L3</b> 冲刺 <span class="sep">·</span> <b>Y</b>/<b>RB</b> 切枪',
     '<b>LB</b> 手雷 <span class="sep">·</span> <b>R3</b> 劈砍 <span class="sep">·</span> <b>Start</b> 暂停',
   ],
 };
@@ -91,6 +91,15 @@ class GameApp {
     this.bossPhaseFlashText = document.getElementById('bossPhaseFlashText');
     this.bossDeathBanner = document.getElementById('bossDeathBanner');
     this.bossDeathName = document.getElementById('bossDeathName');
+    this.bossCallout = document.getElementById('bossCallout');
+    this.bossCalloutName = document.getElementById('bossCalloutName');
+    this.bossCalloutKicker = this.bossCallout?.querySelector('.bc-kicker') || null;
+    this.bossCalloutTimer = null;
+
+    // 竖屏门禁：旋转回横屏后自动继续
+    this.orientationGate = document.getElementById('orientationGate');
+    this.orientationPaused = false;
+
     this._countRaf = 0;
     this._bossDeathName = '';
 
@@ -112,11 +121,36 @@ class GameApp {
     // 显示加载画面，素材加载完成后显示开始界面
     this.showScreen('start');
     this.game.init();
+    this.setupOrientationGate();
     this.tryLockLandscape();
   }
 
+  // 竖屏时用门禁覆盖并暂停；转回横屏后只在「因竖屏自动暂停」时恢复
+  setupOrientationGate() {
+    const query = window.matchMedia('(orientation: portrait) and (max-width: 900px)');
+    const apply = () => {
+      const portrait = query.matches;
+      if (this.orientationGate) {
+        this.orientationGate.setAttribute('aria-hidden', portrait ? 'false' : 'true');
+      }
+      if (portrait) {
+        if (this.game.state === GameState.PLAYING) {
+          this.orientationPaused = true;
+          this.game.pause();
+        }
+      } else if (this.orientationPaused) {
+        this.orientationPaused = false;
+        if (this.game.state === GameState.PAUSED) this.game.resume();
+      }
+    };
+    window.addEventListener('resize', apply);
+    window.addEventListener('orientationchange', () => setTimeout(apply, 160));
+    if (query.addEventListener) query.addEventListener('change', apply);
+    apply();
+  }
+
   // 强制横屏：尝试调用 Screen Orientation API（需用户手势，失败则静默，
-  // CSS 端已有 rotate(90deg) fallback 保证竖屏下仍横屏显示）
+  // 竖屏由 orientation gate 覆盖提示）
   tryLockLandscape() {
     const lock = () => {
       try {
@@ -258,6 +292,11 @@ class GameApp {
       slot.className = 'weapon-slot';
       slot.style.setProperty('--slot-color', cfg.color);
       slot.title = cfg.name;
+      slot.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.selectWeaponSlot(id);
+      });
 
       const icon = document.createElement('canvas');
       icon.className = 'weapon-slot-icon';
@@ -271,6 +310,19 @@ class GameApp {
       this.weaponSlots.appendChild(slot);
       this.weaponSlotEls.set(id, { slot, ammo });
     }
+  }
+
+  // 触屏/鼠标点武器槽：直接切到该武器（仍受背包与弹药限制）
+  selectWeaponSlot(id) {
+    const p = this.game.player;
+    if (!p || this.game.state !== GameState.PLAYING) return;
+    const idx = p.weaponIds.indexOf(id);
+    if (idx < 0 || idx === p.weaponIndex) return;
+    const cfg = GameConfig.WEAPONS.find((item) => item.id === id);
+    if (cfg && !cfg.infiniteAmmo && (p.ammo[id] || 0) <= 0) return;
+    p.weaponIndex = idx;
+    this.game.sfx.click();
+    this.updateWeaponHud();
   }
 
   drawWeaponIcon(canvas, weapon, scale) {
@@ -297,6 +349,8 @@ class GameApp {
     this.game.onBossIntroEnd = () => this.hideBossIntro();
     this.game.onBossPhase = (phase) => this.flashBossPhase(phase);
     this.game.onBossDeath = (data) => this.showBossDeath(data);
+    // Boss 招牌技喊名
+    this.game.onBossAttack = (data) => this.showBossCallout(data);
     // 每帧读统一输入信号，驱动菜单选择与武器 HUD 同步
     this.game.onFrame = (input) => {
       this.updateMenuNav(input);
@@ -352,6 +406,27 @@ class GameApp {
 
   hideBossDeath() {
     if (this.bossDeathBanner) this.bossDeathBanner.classList.remove('active');
+  }
+
+  // 招牌技喊名：短促红色警示条，让玩家在出招前知道该躲什么
+  showBossCallout(data) {
+    if (!this.bossCallout) return;
+    if (this.bossCalloutName) this.bossCalloutName.textContent = data?.name || '危险招式';
+    if (this.bossCalloutKicker) this.bossCalloutKicker.textContent = data?.kicker || 'INCOMING';
+    this.bossCallout.style.setProperty('--callout-color', data?.color || '#ff2e58');
+    this.bossCallout.classList.remove('show');
+    void this.bossCallout.offsetWidth;
+    this.bossCallout.classList.add('show');
+    clearTimeout(this.bossCalloutTimer);
+    this.bossCalloutTimer = setTimeout(() => {
+      this.bossCallout.classList.remove('show');
+    }, 2200);
+  }
+
+  hideBossCallout() {
+    if (!this.bossCallout) return;
+    clearTimeout(this.bossCalloutTimer);
+    this.bossCallout.classList.remove('show');
   }
 
   // 游戏中隐藏按键图例，避免挡住战斗画面；菜单/选关时再显示
@@ -550,6 +625,7 @@ class GameApp {
     document.querySelectorAll('.selected').forEach((el) => el.classList.remove('selected'));
     this.hideBossIntro();
     this.hideBossDeath();
+    this.hideBossCallout();
     this._bossDeathName = '';
     this.menuScreen = null;
     this.menuItems = [];
@@ -583,6 +659,7 @@ class GameApp {
     this.hud.container.style.display = 'none';
     this.hideBossIntro();
     this.hideBossDeath();
+    this.hideBossCallout();
     this.updateWeaponHud();
     this.showScreen('start');
   }

@@ -530,9 +530,9 @@
     }
   ],
   "meta": {
-    "app": "neon-huntdown-build-v2",
+    "app": "neon-huntdown-sprite-forge",
     "version": "2.0",
-    "image": "",
+    "image": "thug_mask.png",
     "format": "RGBA8888",
     "size": {
       "w": 1536,

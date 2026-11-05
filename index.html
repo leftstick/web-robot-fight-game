@@ -20,7 +20,7 @@
 
       <!-- 手机虚拟摇杆 + 动作键层（覆盖在 canvas 上方，仅触屏设备启用） -->
       <div id="touchControls" class="touch-controls">
-        <!-- 左下角虚拟摇杆：左右移动，下推蹲（跳跃用右侧专门的跳跃键） -->
+        <!-- 左半屏浮动摇杆：按下处生成摇杆底座，拖动控制左右移动 / 下推蹲 -->
         <div id="touchStick" class="tc-stick">
           <div class="tc-stick-base">
             <span class="tc-stick-mark m-up">▲</span>
@@ -31,10 +31,21 @@
           </div>
         </div>
 
-        <div class="tc-btn tc-shoot"  data-action="shoot"  style="right:132px;bottom:104px;">射击</div>
-        <div class="tc-btn tc-jump"   data-action="jump"   style="right:22px;bottom:20px;">跳</div>
-        <div class="tc-btn tc-crouch" data-action="crouch" style="right:132px;bottom:18px;">蹲</div>
-        <div class="tc-btn tc-switch" data-action="switch" style="right:24px;bottom:150px;">切枪</div>
+        <div class="tc-btn tc-shoot"   data-action="shoot"   style="right:var(--act-r1);bottom:var(--act-b1);">射击<small>AUTO</small></div>
+        <div class="tc-btn tc-jump"    data-action="jump"    style="right:var(--act-r2);bottom:var(--act-b2);">跳跃</div>
+        <div class="tc-btn tc-dash"    data-action="dash"    style="right:var(--act-r3);bottom:var(--act-b3);">冲刺</div>
+        <div class="tc-btn tc-grenade" data-action="grenade" style="right:var(--act-r4);bottom:var(--act-b4);">手雷</div>
+        <div class="tc-btn tc-switch"  data-action="switch"  style="right:var(--act-r5);bottom:var(--act-b5);">切枪</div>
+        <div class="tc-btn tc-melee"   data-action="melee"   style="right:var(--act-r6);bottom:var(--act-b6);">劈砍</div>
+      </div>
+
+      <!-- 竖屏提示：不再旋转整个游戏，改为提示用户横屏 -->
+      <div id="orientationGate" class="orientation-gate" aria-hidden="true">
+        <div class="og-card">
+          <div class="og-icon">⟳</div>
+          <p class="og-title">请旋转至横屏</p>
+          <p class="og-sub">横版射击需要更宽的视野<br>旋转设备后自动继续</p>
+        </div>
       </div>
 
       <!-- 手柄按键图例（仅检测到手柄连接时显示） -->
@@ -143,6 +154,12 @@
             <span id="bossIntroHp">HP 120</span>
           </div>
         </div>
+      </div>
+
+      <!-- BOSS 招式喊名：出招前短暂的红色警示条 -->
+      <div id="bossCallout" class="boss-callout" aria-hidden="true">
+        <span class="bc-kicker">INCOMING</span>
+        <span class="bc-name" id="bossCalloutName">蒸汽爆裂</span>
       </div>
 
       <!-- 阶段切换闪屏 -->

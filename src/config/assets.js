@@ -7,7 +7,18 @@ export const ASSETS = {
   thug_mohawk: { png: 'assets/thug_mohawk.png', json: 'assets/thug_mohawk.json' },
   thug_mask: { png: 'assets/thug_mask.png', json: 'assets/thug_mask.json' },
   thug_bald: { png: 'assets/thug_bald.png', json: 'assets/thug_bald.json' },
-  boss: { png: 'assets/boss.png', json: 'assets/boss.json' },
+  rusher: { png: 'assets/rusher.png', json: 'assets/rusher.json' },
+  gunner: { png: 'assets/gunner.png', json: 'assets/gunner.json' },
+  sniper: { png: 'assets/sniper.png', json: 'assets/sniper.json' },
+  shield: { png: 'assets/shield.png', json: 'assets/shield.json' },
+  heavy: { png: 'assets/heavy.png', json: 'assets/heavy.json' },
+  biker: { png: 'assets/biker.png', json: 'assets/biker.json' },
+
+  // 四个关底 Boss 各自独立建模
+  boss_steam: { png: 'assets/boss_steam.png', json: 'assets/boss_steam.json' },
+  boss_crane: { png: 'assets/boss_crane.png', json: 'assets/boss_crane.json' },
+  boss_warden: { png: 'assets/boss_warden.png', json: 'assets/boss_warden.json' },
+  boss_rail: { png: 'assets/boss_rail.png', json: 'assets/boss_rail.json' },
 
   // 掩体道具（7 种 × 3 阶段）
   covers: { png: 'assets/covers.png', json: 'assets/covers.json' },

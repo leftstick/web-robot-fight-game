@@ -76,12 +76,19 @@ body::before {
   justify-content: center;
   align-items: center;
   position: relative;
+  /* 刘海屏/挖孔屏横屏时避开安全区 */
+  padding:
+    env(safe-area-inset-top, 0px)
+    env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px)
+    env(safe-area-inset-left, 0px);
+  box-sizing: border-box;
 }
 
 .game-container {
   position: relative;
-  width: min(100vw, calc(100dvh * 16 / 9));
-  height: min(100dvh, calc(100vw * 9 / 16));
+  width: min(100%, calc(100dvh * 16 / 9));
+  height: min(100%, calc(100vw * 9 / 16));
   max-width: 1440px;
   max-height: 810px;
   aspect-ratio: 16 / 9;
@@ -155,13 +162,13 @@ body::before {
   transform: scale(0.93);
 }
 
-/* 左侧虚拟摇杆：外圈触控区 + 底盘 + 摇杆头 */
+/* 左侧浮动摇杆：整个左半屏是触控区，按下处生成摇杆底座 */
 .tc-stick {
   position: absolute;
-  left: 10px;
-  bottom: 8px;
-  width: 186px;
-  height: 186px;
+  left: 0;
+  bottom: 0;
+  width: 46%;
+  height: 72%;
   pointer-events: auto;
   touch-action: none;
   -webkit-user-select: none;
@@ -171,52 +178,59 @@ body::before {
 
 .tc-stick-base {
   position: absolute;
-  inset: 24px;
+  left: 100px;
+  top: calc(100% - 105px);
+  width: 132px;
+  height: 132px;
+  transform: translate(-50%, -50%);
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.22);
+  border: 2px solid rgba(255, 255, 255, 0.20);
   background: radial-gradient(circle at 50% 45%,
-              rgba(255, 255, 255, 0.10) 0%,
-              rgba(255, 255, 255, 0.04) 55%,
-              rgba(255, 255, 255, 0.02) 100%);
+              rgba(255, 255, 255, 0.09) 0%,
+              rgba(255, 255, 255, 0.035) 55%,
+              rgba(255, 255, 255, 0.015) 100%);
   box-shadow:
-    inset 0 0 22px rgba(0, 212, 255, 0.18),
+    inset 0 0 22px rgba(0, 212, 255, 0.16),
     0 0 14px rgba(0, 0, 0, 0.35);
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  opacity: 0.5;
+  transition: opacity 0.14s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  pointer-events: none;
 }
 
 .tc-stick-mark {
   position: absolute;
-  color: rgba(255, 255, 255, 0.30);
-  font-size: 12px;
+  color: rgba(255, 255, 255, 0.28);
+  font-size: 11px;
   line-height: 1;
   pointer-events: none;
   transition: color 0.12s ease;
 }
 
-.tc-stick-mark.m-up    { top: 8px;    left: 50%; transform: translateX(-50%); }
-.tc-stick-mark.m-down  { bottom: 8px; left: 50%; transform: translateX(-50%); }
-.tc-stick-mark.m-left  { left: 8px;   top: 50%;  transform: translateY(-50%); }
-.tc-stick-mark.m-right { right: 8px;  top: 50%;  transform: translateY(-50%); }
+.tc-stick-mark.m-up    { top: 7px;    left: 50%; transform: translateX(-50%); }
+.tc-stick-mark.m-down  { bottom: 7px; left: 50%; transform: translateX(-50%); }
+.tc-stick-mark.m-left  { left: 7px;   top: 50%;  transform: translateY(-50%); }
+.tc-stick-mark.m-right { right: 7px;  top: 50%;  transform: translateY(-50%); }
 
 .tc-stick-knob {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 62px;
-  height: 62px;
+  width: 54px;
+  height: 54px;
   border-radius: 50%;
   transform: translate(-50%, -50%);
   background: radial-gradient(circle at 50% 35%,
-              rgba(255, 255, 255, 0.32) 0%,
-              rgba(255, 255, 255, 0.14) 60%,
-              rgba(255, 255, 255, 0.08) 100%);
-  border: 2px solid rgba(255, 255, 255, 0.5);
+              rgba(255, 255, 255, 0.30) 0%,
+              rgba(255, 255, 255, 0.12) 60%,
+              rgba(255, 255, 255, 0.06) 100%);
+  border: 2px solid rgba(255, 255, 255, 0.45);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   pointer-events: none;
 }
 
 /* 摇杆激活态：整体亮起 */
 .tc-stick.active .tc-stick-base {
+  opacity: 1;
   border-color: rgba(0, 229, 255, 0.85);
   box-shadow:
     inset 0 0 26px rgba(0, 212, 255, 0.35),
@@ -236,14 +250,37 @@ body::before {
   box-shadow: 0 0 18px rgba(0, 212, 255, 0.55);
 }
 
-/* 右侧动作键 */
+/* 右侧动作键：尺寸与位置全部按容器高度缩放，360~600px 高度都不重叠 */
+.touch-controls {
+  --s1: 22cqh;
+  --s2: 18cqh;
+  --s3: 15cqh;
+  --s4: 13cqh;
+  --s5: 11.5cqh;
+  --s6: 12cqh;
+  --act-r1: 3cqh;    --act-b1: 3cqh;
+  --act-r2: 25.5cqh; --act-b2: 2.5cqh;
+  --act-r3: 2.5cqh;  --act-b3: 31cqh;
+  --act-r4: 19.5cqh; --act-b4: 28.8cqh;
+  --act-r5: 20cqh;   --act-b5: 45cqh;
+  --act-r6: 2.5cqh;  --act-b6: 54cqh;
+}
+
 .tc-shoot {
-  width: 96px;
-  height: 96px;
-  font-size: 16px;
+  width: var(--s1);
+  height: var(--s1);
+  font-size: clamp(12px, 2.6cqh, 16px);
   background: rgba(255, 71, 87, 0.16);
   border-color: rgba(255, 71, 87, 0.5);
   color: rgba(255, 200, 200, 0.85);
+}
+
+.tc-shoot small {
+  position: absolute;
+  bottom: 16%;
+  font-size: 7px;
+  letter-spacing: 1px;
+  opacity: 0.65;
 }
 
 .tc-shoot.active {
@@ -253,9 +290,9 @@ body::before {
 }
 
 .tc-jump {
-  width: 78px;
-  height: 78px;
-  font-size: 18px;
+  width: var(--s2);
+  height: var(--s2);
+  font-size: clamp(13px, 2.8cqh, 18px);
   background: rgba(177, 74, 237, 0.14);
   border-color: rgba(177, 74, 237, 0.5);
   color: rgba(220, 190, 255, 0.85);
@@ -267,16 +304,40 @@ body::before {
   box-shadow: 0 0 20px rgba(177, 74, 237, 0.7), inset 0 0 14px rgba(177, 74, 237, 0.35);
 }
 
-.tc-crouch {
-  width: 66px;
-  height: 66px;
-  font-size: 15px;
+.tc-dash {
+  width: var(--s3);
+  height: var(--s3);
+  font-size: clamp(11px, 2.4cqh, 15px);
+  background: rgba(0, 229, 255, 0.13);
+  border-color: rgba(0, 229, 255, 0.55);
+  color: rgba(190, 245, 255, 0.9);
+}
+
+.tc-dash.active {
+  background: rgba(0, 229, 255, 0.42);
+  border-color: rgba(0, 229, 255, 1);
+  box-shadow: 0 0 22px rgba(0, 229, 255, 0.75), inset 0 0 14px rgba(0, 229, 255, 0.35);
+}
+
+.tc-grenade {
+  width: var(--s4);
+  height: var(--s4);
+  font-size: clamp(10px, 2.1cqh, 13px);
+  background: rgba(255, 162, 61, 0.13);
+  border-color: rgba(255, 162, 61, 0.55);
+  color: rgba(255, 225, 190, 0.9);
+}
+
+.tc-grenade.active {
+  background: rgba(255, 162, 61, 0.42);
+  border-color: rgba(255, 162, 61, 1);
+  box-shadow: 0 0 20px rgba(255, 162, 61, 0.7), inset 0 0 12px rgba(255, 162, 61, 0.35);
 }
 
 .tc-switch {
-  width: 52px;
-  height: 52px;
-  font-size: 12px;
+  width: var(--s5);
+  height: var(--s5);
+  font-size: clamp(9px, 1.9cqh, 12px);
   background: rgba(57, 255, 136, 0.12);
   border-color: rgba(57, 255, 136, 0.5);
   color: rgba(190, 255, 210, 0.85);
@@ -288,20 +349,70 @@ body::before {
   box-shadow: 0 0 18px rgba(57, 255, 136, 0.7), inset 0 0 12px rgba(57, 255, 136, 0.35);
 }
 
-/* 强制横屏：竖屏时将游戏容器旋转 90° 铺满视口，无需用户手动转屏 */
-@media (orientation: portrait) {
-  .game-container {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    width: 100vh;
-    height: 100vw;
-    max-width: none;
-    max-height: none;
-    transform: translate(-50%, -50%) rotate(90deg);
-    border-radius: 0;
+.tc-melee {
+  width: var(--s6);
+  height: var(--s6);
+  font-size: clamp(9px, 2cqh, 12px);
+  background: rgba(255, 224, 102, 0.12);
+  border-color: rgba(255, 224, 102, 0.5);
+  color: rgba(255, 244, 200, 0.9);
+}
+
+.tc-melee.active {
+  background: rgba(255, 224, 102, 0.38);
+  border-color: rgba(255, 224, 102, 1);
+  box-shadow: 0 0 18px rgba(255, 224, 102, 0.7), inset 0 0 12px rgba(255, 224, 102, 0.35);
+}
+
+/* 竖屏提示：不再旋转整个游戏，改为提示用户横屏 */
+.orientation-gate {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #05070d;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  touch-action: none;
+}
+
+@media (orientation: portrait) and (max-width: 900px) {
+  .orientation-gate {
+    display: flex;
   }
 }
+
+.og-card {
+  text-align: center;
+  color: #cfe1f1;
+}
+
+.og-icon {
+  font-size: 56px;
+  color: #00e5ff;
+  line-height: 1;
+  margin-bottom: 18px;
+  filter: drop-shadow(0 0 18px rgba(0, 229, 255, 0.65));
+}
+
+.og-title {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: #aef4ff;
+  margin-bottom: 12px;
+}
+
+.og-sub {
+  font-size: 13px;
+  line-height: 1.8;
+  color: #7f95ad;
+  letter-spacing: 1px;
+}
+
+/* 竖屏不再旋转整个 UI：由 #orientationGate 提示用户转屏，
+   避免触控坐标与旋转后的容器错位。 */
 
 .screen {
   position: absolute;
@@ -706,6 +817,9 @@ body::before {
   justify-content: center;
   background: rgba(255, 255, 255, 0.035);
   overflow: hidden;
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
 .weapon-slot::before {
@@ -1054,13 +1168,13 @@ body::before {
 }
 
 .pause-btn {
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   border: 1px solid rgba(0, 229, 255, 0.55);
   border-radius: 2px;
   background: rgba(0, 229, 255, 0.06);
   color: #7fe9ff;
-  font-size: 13px;
+  font-size: 16px;
   cursor: pointer;
   pointer-events: auto;
   transition: all 0.2s ease;
@@ -1171,6 +1285,60 @@ body::before {
 
 .boss-intro-meta span:last-child {
   color: #ff6ba6;
+}
+
+/* BOSS 招牌技喊名 */
+.boss-callout {
+  --callout-color: #ff2e58;
+  position: absolute;
+  left: 50%;
+  top: 17%;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25cqh;
+  padding: 0.55cqh 2.4cqw;
+  transform: translate(-50%, -8px);
+  border-top: 2px solid var(--callout-color);
+  border-bottom: 1px solid color-mix(in srgb, var(--callout-color) 55%, transparent);
+  background: linear-gradient(90deg,
+              transparent 0%,
+              rgba(8, 14, 24, 0.82) 18%,
+              rgba(8, 14, 24, 0.82) 82%,
+              transparent 100%);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.boss-callout.show {
+  animation: bossCallout 2.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.bc-kicker {
+  font-size: clamp(7px, 1.05cqh, 10px);
+  letter-spacing: 0.42em;
+  font-weight: 700;
+  color: var(--callout-color);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--callout-color) 70%, transparent);
+}
+
+.bc-name {
+  font-size: clamp(16px, 3.4cqh, 32px);
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.16em;
+  color: #f4fbff;
+  text-shadow:
+    2px 0 0 color-mix(in srgb, var(--callout-color) 80%, transparent),
+    0 0 18px color-mix(in srgb, var(--callout-color) 55%, transparent);
+}
+
+@keyframes bossCallout {
+  0% { opacity: 0; transform: translate(-50%, -10px) scale(0.94); }
+  8% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  88% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, 3px) scale(1.02); }
 }
 
 /* 阶段切换闪字 */

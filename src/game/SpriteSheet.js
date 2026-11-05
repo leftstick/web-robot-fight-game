@@ -224,7 +224,9 @@ export class AssetLoader {
   async loadAll() {
     const entries = [];
     // 角色 & 掩体 & 特效 & UI
-    for (const key of ['player', 'thug_mohawk', 'thug_mask', 'thug_bald', 'boss', 'covers',
+    for (const key of ['player', 'thug_mohawk', 'thug_mask', 'thug_bald',
+      'rusher', 'gunner', 'sniper', 'shield', 'heavy', 'biker',
+      'boss_steam', 'boss_crane', 'boss_warden', 'boss_rail', 'covers',
       'fx_muzzle_flash', 'fx_sparks', 'fx_blood', 'fx_explosion', 'fx_smoke', 'fx_shell', 'fx_debris',
       'ui_hud', 'ui_title', 'ui_panel', 'ui_crt']) {
       entries.push({ key, ...ASSETS[key] });
@@ -263,7 +265,13 @@ export class AssetLoader {
       } else {
         const fw = r.json.frames[0].frame.w;
         const fh = r.json.frames[0].frame.h;
-        const footOffsets = { player: 3, thug_mohawk: 4, thug_mask: 4, thug_bald: 4, boss: 1 };
+        // 人形美术脚底在 y=63（64 帧），Boss 在 y=109（112 帧）；
+        // offset = frameH - 脚底像素 - 1，让脚底正好落在地面线上。
+        const footOffsets = {
+          player: 1, thug_mohawk: 1, thug_mask: 1, thug_bald: 1,
+          rusher: 1, gunner: 1, sniper: 1, shield: 1, heavy: 1, biker: 1,
+          boss_steam: 3, boss_crane: 3, boss_warden: 3, boss_rail: 3,
+        };
         cache.sprites[r.key] = new SpriteSheet(r.img, r.json, fw, fh, footOffsets[r.key] || 0);
       }
     }

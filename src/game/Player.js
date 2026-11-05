@@ -53,6 +53,15 @@ export class Player {
     this.isInvincible = false;
     this.invincibleEnd = 0;
 
+    // 冲刺/滑铲 + 下落穿板
+    this.dashUntil = 0;
+    this.dashCooldownUntil = 0;
+    this.dashDir = 1;
+    this.dashIFramesUntil = 0;
+    this.dashGhostAt = 0;
+    this.dropThroughUntil = 0;
+    this.prevY = 0;
+
     this.animTime = 0;
     this.frame = 0;
 
@@ -84,6 +93,12 @@ export class Player {
     this.meleeAnimUntil = 0;
     this.meleeHitDone = false;
     this.isInvincible = false;
+    this.dashUntil = 0;
+    this.dashCooldownUntil = 0;
+    this.dashDir = 1;
+    this.dashIFramesUntil = 0;
+    this.dropThroughUntil = 0;
+    this.prevY = 0;
     this.animTime = 0;
     this.frame = 0;
   }
@@ -144,8 +159,44 @@ export class Player {
     return false;
   }
 
+  // 站在薄平台上「下 + 跳」：短暂忽略单向平台，直接落下去
+  tryDropThrough(currentTime) {
+    if (!this.onGround) return false;
+    const feet = this.y + this.height;
+    const onOneWay = (this._platforms || []).some((p) => {
+      const oneWay = p.oneWay || p.h <= 12;
+      return oneWay && Math.abs(p.y - feet) <= 3 &&
+             this.x + this.width > p.x && this.x < p.x + p.w;
+    });
+    if (!onOneWay) return false;
+    this.dropThroughUntil = currentTime + 220;
+    this.y += 3;
+    this.vy = 1.2;
+    this.onGround = false;
+    return true;
+  }
+
+  tryDash(currentTime) {
+    if (currentTime < this.dashCooldownUntil) return false;
+    if (currentTime < this.dashUntil) return false;
+    const dir = this.moveLeft && !this.moveRight ? -1
+      : (this.moveRight && !this.moveLeft ? 1 : this.facing);
+    this.dashDir = dir;
+    this.facing = dir;
+    this.dashUntil = currentTime + P.dashDuration;
+    this.dashCooldownUntil = currentTime + P.dashCooldown;
+    this.dashIFramesUntil = currentTime + P.dashIFrames;
+    this.dashGhostAt = currentTime;
+    return true;
+  }
+
+  isDashing(currentTime) {
+    return currentTime < this.dashUntil;
+  }
+
   update(dtf, world, currentTime) {
     this._t = currentTime || 0;
+    this._platforms = world.platforms || [];
 
     // 先响应蹲伏意图，再移动；移动结束若已走出矮空间则尝试站起
     this.updateCrouch(world.platforms);
@@ -160,12 +211,20 @@ export class Player {
     if (this.crouching) speed *= 0.45;  // 蹲下移动：大幅减速（蹲走）
     this.vx = move * speed;
 
-    if (move !== 0) this.facing = move > 0 ? 1 : -1;
+    // 冲刺期间锁定方向与速度，忽略普通移动输入
+    const dashing = this.isDashing(this._t);
+    if (dashing) {
+      this.vx = this.dashDir * P.dashSpeed;
+      this.facing = this.dashDir;
+    } else if (move !== 0) {
+      this.facing = move > 0 ? 1 : -1;
+    }
 
     this.x += this.vx * dtf;
     this.resolveHorizontal(world.platforms);
 
     // —— 垂直 ——
+    this.prevY = this.y;
     this.vy += GameConfig.GRAVITY * dtf;
     if (this.vy > GameConfig.MAX_FALL_SPEED) this.vy = GameConfig.MAX_FALL_SPEED;
     this.y += this.vy * dtf;
@@ -193,6 +252,7 @@ export class Player {
     if (this.vx === 0) return;
     const box = this.getBounds();
     for (const p of platforms) {
+      if (p.oneWay || p.h <= 12) continue;   // 薄平台只从上方站立，不挡水平移动
       const pb = { x: p.x, y: p.y, width: p.w, height: p.h };
       if (!aabb(box, pb)) continue;
       if (this.vx > 0) this.x = p.x - this.width;
@@ -206,6 +266,12 @@ export class Player {
     for (const p of platforms) {
       const pb = { x: p.x, y: p.y, width: p.w, height: p.h };
       if (!aabb(box, pb)) continue;
+      const oneWay = p.oneWay || p.h <= 12;
+      if (oneWay) {
+        if (this._t < this.dropThroughUntil) continue;
+        // 单向平台：只在下落且脚底从上方越过平台顶面时接住
+        if (this.vy < 0 || this.prevY + this.height > p.y + 2) continue;
+      }
       if (this.vy >= 0) {
         this.y = p.y - this.height;
         this.vy = 0;
@@ -239,14 +305,14 @@ export class Player {
   }
 
   getGunHeight() {
-    // 与 1px 精灵里的枪管对齐：站立 27、蹲伏 15（相对碰撞盒顶部）
-    return this.crouching ? 15 : 27;
+    // 与精灵枪管中心线对齐：站立 26、蹲伏 14（相对碰撞盒顶部）
+    return this.crouching ? 14 : 26;
   }
 
   getMuzzle() {
-    const offset = this.crouching ? 22 : 24;
+    // 紧凑武器枪口固定在帧中心 +24
     return {
-      x: this.getCenterX() + this.facing * offset,
+      x: this.getCenterX() + this.facing * 24,
       y: this.y + this.getGunHeight(),
     };
   }
@@ -415,6 +481,7 @@ export class Player {
   }
 
   isInvincibleNow(currentTime) {
+    if (currentTime < this.dashIFramesUntil) return true;
     if (this.isInvincible && currentTime > this.invincibleEnd) {
       this.isInvincible = false;
     }
@@ -433,6 +500,11 @@ export class Player {
     }
     if (this.meleeMode && !this.crouching) {
       return ANIM.PLAYER_MELEE[5];
+    }
+    if (this.isDashing(currentTime)) {
+      // 冲刺没有独立帧，用跑步帧加速播放 + 残影表现速度
+      const f = ANIM.PLAYER_RUN;
+      return f[Math.floor(currentTime / 28) % f.length];
     }
     if (!this.onGround) {
       const f = ANIM.PLAYER_JUMP;
@@ -514,6 +586,20 @@ export class Player {
     ctx.fillRect(Math.round(cx) - 3, Math.round(feet) - 5, 6, 1);
 
     const recoil = currentTime < this.shootAnimUntil ? -this.facing * 2 : 0;
+
+    // 冲刺残影：两帧青色剪影，让短位移在画面上有速度感
+    if (this.isDashing(currentTime)) {
+      for (let i = 1; i <= 2; i++) {
+        ctx.save();
+        ctx.globalAlpha = 0.22 / i;
+        sprites.player.drawTint(
+          ctx, frame, cx + recoil - this.dashDir * i * 9, feet,
+          this.facing, '#45eeff', 0.9,
+        );
+        ctx.restore();
+      }
+    }
+
     // 环境霓虹边缘光：左青右粉，让角色从暗背景里“剥”出来
     sprites.player.drawTint(ctx, frame, cx + recoil - 1, feet, this.facing, '#00e5ff', 0.28);
     sprites.player.drawTint(ctx, frame, cx + recoil + 1, feet, this.facing, '#ff2e88', 0.15);

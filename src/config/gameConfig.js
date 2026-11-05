@@ -36,6 +36,11 @@ export const GameConfig = {
     bulletWidth: 12,
     bulletHeight: 3,
     grenadeCooldown: 1400,
+    // 冲刺/滑铲：短距离位移 + 无敌帧，用来穿过弹道或拉开距离
+    dashSpeed: 7.4,
+    dashDuration: 170,
+    dashCooldown: 820,
+    dashIFrames: 150,
   },
 
   THUG: {                   // 人形暴徒
@@ -180,16 +185,29 @@ export const GameConfig = {
   },
 
   // 关卡专属 Boss 覆盖参数：未列出的字段沿用 BOSS 默认值
+  // sheet / signature 决定独立建模与招牌机制
   BOSS_PROFILES: {
+    1: {
+      sheet: 'boss_steam',
+      signature: 'steam',
+      summonType: 'thug',
+      summonCount: 2,
+    },
     2: {
+      sheet: 'boss_crane',
+      signature: 'crane',
       summonType: 'heavy',
       summonCount: 1,
     },
     3: {
+      sheet: 'boss_warden',
+      signature: 'warden',
       summonType: 'shield',
       summonCount: 1,
     },
     4: {
+      sheet: 'boss_rail',
+      signature: 'rail',
       bulletSpeed: 3.4,
       aimWindup: [620, 500, 420],
       aimBurst: [3, 4, 4],
@@ -200,6 +218,26 @@ export const GameConfig = {
       summonType: 'rusher',    // 二阶段召唤疾行者
       summonCount: 1,          // 高架空间窄，召唤量减半
       slamCooldown: 3000,
+    },
+  },
+
+  // 四个 Boss 的招牌机制：前摇喊名 -> 场地机关 -> 收招后核心暴露（反击窗口）
+  BOSS_SIGNATURES: {
+    steam: {
+      callout: '蒸汽爆裂', kicker: 'STEAM BURST', color: '#7fe9ff',
+      windup: 820, active: 1300, recover: 320, punish: 1800, cooldown: 7200,
+    },
+    crane: {
+      callout: '磁吊落箱', kicker: 'MAGNET DROP', color: '#ffb347',
+      windup: 900, active: 1700, recover: 320, punish: 2000, cooldown: 7600,
+    },
+    warden: {
+      callout: '盾墙激光', kicker: 'WARDEN GRID', color: '#ff5a8a',
+      windup: 900, active: 2200, recover: 360, punish: 2200, cooldown: 8000,
+    },
+    rail: {
+      callout: '轨道电涌', kicker: 'RAIL SURGE', color: '#c77dff',
+      windup: 860, active: 1800, recover: 340, punish: 2000, cooldown: 7000,
     },
   },
 

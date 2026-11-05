@@ -70,7 +70,9 @@ export class Game {
     this.bossDeath = null;
     this.cinematic = null;          // null | bossIntro | bossDeath
     this.shockwaves = [];
+    this.bossHazards = [];
     this.arenaPlatformsAdded = false;
+    this.bossDoorHealed = false;
 
     // 关卡节奏：分区遭遇、检查点、场景机关
     this.encounterIndex = 0;
@@ -122,6 +124,7 @@ export class Game {
     this.onBossIntroEnd = null;
     this.onBossPhase = null;
     this.onBossDeath = null;
+    this.onBossAttack = null;
 
     this._lastRemaining = -1;
   }
@@ -188,7 +191,9 @@ export class Game {
     this.bossDeath = null;
     this.cinematic = null;
     this.shockwaves = [];
+    this.bossHazards = [];
     this.arenaPlatformsAdded = false;
+    this.bossDoorHealed = false;
     this.encounterIndex = 0;
     this.activeEncounter = null;
     this.totalEnemyCount = this.level.totalEnemies || 0;
@@ -317,7 +322,19 @@ export class Game {
     // 只记录意图；是否真的站起由头顶净空决定
     p.wantsCrouch = input.crouch;
 
-    if (input.jump && p.jump()) this.sfx.jump();
+    // 下 + 跳：从单向平台落下；否则普通跳跃
+    if (input.jump && input.crouch) {
+      if (p.tryDropThrough(this.currentTime)) this.sfx.jump();
+    } else if (input.jump && p.jump()) {
+      this.sfx.jump();
+    }
+
+    // 冲刺/滑铲：短位移 + 无敌帧
+    if (input.dash && p.tryDash(this.currentTime)) {
+      this.sfx.jump();
+      this.particleSystem.createExplosion(p.getCenterX(), p.y + p.height - 4, '#45eeff', 6);
+      this.addScreenShake(5, 3);
+    }
 
     if (input.shoot && !p.meleeMode) {
       const fire = p.tryFire(this.currentTime);
@@ -377,6 +394,7 @@ export class Game {
     this.updateBullets(dtf);
     this.updateEnemies(dtf);
     this.updateShockwaves(dtf);
+    this.updateBossHazards(dtf);
     this.updateHazards();
     this.updateCheckpoints();
     this.updatePickups(dtf);
@@ -397,6 +415,7 @@ export class Game {
       aim: false,
       crouch: false,
       jump: false,
+      dash: false,
       shoot: false,
       grenade: false,
       switchWeapon: false,
@@ -541,10 +560,20 @@ export class Game {
     for (const e of this.enemies) {
       if (e.dead || !e.awake) continue;
       if (aabb(hitbox, e.getBounds())) {
-        const died = e.takeDamage(GameConfig.MELEE.damage);
-        // 血溅 + 白色冲击闪光 + 短促顿帧
         const hx = e.getCenterX();
         const hy = e.y + e.height * 0.4;
+
+        // 盾墙挡下近战，避免贴脸硬吃
+        if (e === this.boss && e.isFrontShielded && e.isFrontShielded()) {
+          this.effectSystem.hitSparks(hx, hy);
+          this.particleSystem.createExplosion(hx, hy, '#ff5a8a', 6);
+          this.addScreenShake(4, 3);
+          p.markMeleeHit();
+          break;
+        }
+
+        const died = e.takeDamage(GameConfig.MELEE.damage);
+        // 血溅 + 白色冲击闪光 + 短促顿帧
         this.effectSystem.blood(hx, hy);
         this.effectSystem.hitSparks(hx, hy);
         this.particleSystem.createExplosion(hx, hy, '#ff5a5a', 8);
@@ -619,6 +648,16 @@ export class Game {
           b.active = false;
           const hx = b.x + b.width / 2;
           const hy = b.y + b.height / 2;
+
+          // 盾墙形态：正面子弹被能量盾弹开，必须等收招后的核心窗口
+          if (e === this.boss && e.isFrontShielded && e.isFrontShielded()) {
+            this.effectSystem.hitSparks(hx, hy);
+            this.particleSystem.createExplosion(hx, hy, '#ff5a8a', 7);
+            this.addHitStop(18);
+            this.sfx.click();
+            return;
+          }
+
           this.shotsHit++;
           const prevPhase = e === this.boss ? e.phase : 0;
           const multiplier = e.damageMultiplierAt ? e.damageMultiplierAt(hx, hy) : 1;
@@ -793,6 +832,20 @@ export class Game {
         if (e.consumeShockwave && e.consumeShockwave()) this.triggerBossShockwave(e);
         const summonCount = e.consumeSummon ? e.consumeSummon() : 0;
         if (summonCount > 0) this.summonBossAdds(summonCount, e.summonType || 'thug');
+
+        // 招牌技：喊名 -> 场地机关 -> 反击窗口提示
+        const callout = e.consumeCallout ? e.consumeCallout() : null;
+        if (callout) {
+          this.sfx.bossAim();
+          this.addScreenShake(6, 4);
+          if (this.onBossAttack) this.onBossAttack(callout);
+        }
+        const sigEvent = e.consumeSignatureEvent ? e.consumeSignatureEvent() : null;
+        if (sigEvent) this.triggerBossSignature(e, sigEvent);
+        if (e.consumePunish && e.consumePunish()) {
+          this.showPickupToast('核心暴露 · 反击窗口', '#ffe066');
+          this.addHitStop(40);
+        }
       }
 
       // Boss 冲撞接触伤害
@@ -848,6 +901,278 @@ export class Game {
 
       if (w.age > w.life || w.x < this.bossArena?.x1 - 10 || w.x > this.bossArena?.x2 + 10) {
         this.shockwaves.splice(i, 1);
+      }
+    }
+  }
+
+  // —— Boss 招牌技：把事件翻译成可躲避/可惩罚的场地机关 ——
+  triggerBossSignature(boss, ev) {
+    const ground = GameConfig.GROUND_Y;
+    if (!ev) return;
+
+    if (ev.type === 'steam') {
+      for (const x of ev.vents || []) {
+        this.bossHazards.push({
+          type: 'geyser', x, age: 0, warn: 700, activeFor: 520, hit: false,
+        });
+      }
+      this.sfx.steam();
+      this.addScreenShake(8, 4);
+    } else if (ev.type === 'crane') {
+      for (const x of ev.drops || []) {
+        this.bossHazards.push({
+          type: 'container', x, age: 0, warn: 850, fall: 320, landHold: 480,
+          landed: false, hit: false,
+        });
+      }
+      this.sfx.crane();
+      this.addScreenShake(7, 4);
+    } else if (ev.type === 'warden') {
+      this.bossHazards.push({
+        type: 'laser', age: 0, x1: ev.x1, x2: ev.x2, pulses: ev.pulses || [],
+        hitPulse: -1,
+      });
+      this.sfx.laser();
+      this.addScreenShake(6, 3);
+    } else if (ev.type === 'rail') {
+      for (const dir of ev.dirs || [-1, 1]) {
+        this.bossHazards.push({
+          type: 'railwave', x: ev.from, dir, speed: 2.5, age: 0, life: 1700,
+          x1: ev.x1, x2: ev.x2, hit: false,
+        });
+      }
+      this.sfx.rail();
+      this.effectSystem.explosion(ev.from, ground - 6);
+      this.particleSystem.createExplosion(ev.from, ground - 6, '#c77dff', 14);
+      this.addScreenShake(10, 5);
+    }
+  }
+
+  updateBossHazards(dtf) {
+    if (this.bossHazards.length === 0) return;
+    const p = this.player;
+    const ground = GameConfig.GROUND_Y;
+    const t = this.currentTime;
+
+    for (let i = this.bossHazards.length - 1; i >= 0; i--) {
+      const h = this.bossHazards[i];
+      h.age += this.deltaTime;
+      let rect = null;
+
+      if (h.type === 'geyser') {
+        const active = h.age >= h.warn && h.age < h.warn + h.activeFor;
+        if (active) rect = { x: h.x - 10, y: ground - 64, width: 20, height: 64 };
+        if (active && !h.hit && aabb(rect, p.getBounds())) {
+          h.hit = true;
+          if (!p.isInvincibleNow(t)) {
+            this.damagePlayer();
+            this.addScreenShake(7, 4);
+          }
+        }
+        if (h.age >= h.warn + h.activeFor + 120) {
+          this.bossHazards.splice(i, 1);
+          continue;
+        }
+      } else if (h.type === 'container') {
+        const fallStart = h.warn;
+        const landAt = fallStart + h.fall;
+        const leaveAt = landAt + h.landHold;
+        const landed = h.age >= landAt;
+        if (h.age >= fallStart && h.age < leaveAt) {
+          if (landed && !h.landed) {
+            h.landed = true;
+            this.effectSystem.explosion(h.x, ground - 8);
+            this.particleSystem.createExplosion(h.x, ground - 8, '#ffb347', 16);
+            this.addScreenShake(12, 6);
+            this.sfx.explosion();
+          }
+          const fallK = Math.max(0, Math.min(1, (h.age - fallStart) / h.fall));
+          const y = landed ? ground - 30 : ground - 30 - (1 - fallK) * 170;
+          rect = { x: h.x - 14, y, width: 28, height: 30 };
+          if (!h.hit && aabb(rect, p.getBounds())) {
+            h.hit = true;
+            if (!p.isInvincibleNow(t)) {
+              this.damagePlayer();
+              this.addScreenShake(9, 5);
+            }
+          }
+        }
+        if (h.age >= leaveAt) {
+          this.bossHazards.splice(i, 1);
+          continue;
+        }
+      } else if (h.type === 'laser') {
+        let idx = -1;
+        for (let k = 0; k < h.pulses.length; k++) {
+          const pl = h.pulses[k];
+          if (h.age >= pl.start && h.age < pl.end) { idx = k; break; }
+        }
+        if (idx >= 0) {
+          const pl = h.pulses[idx];
+          rect = {
+            x: h.x1, y: pl.low ? ground - 16 : ground - 48,
+            width: h.x2 - h.x1, height: 4,
+          };
+          if (h.hitPulse !== idx && aabb(rect, p.getBounds())) {
+            h.hitPulse = idx;
+            if (!p.isInvincibleNow(t)) {
+              this.damagePlayer();
+              this.addScreenShake(8, 4);
+            }
+          }
+        }
+        const last = h.pulses[h.pulses.length - 1];
+        if (last && h.age >= last.end + 180) {
+          this.bossHazards.splice(i, 1);
+          continue;
+        }
+      } else if (h.type === 'railwave') {
+        h.x += h.dir * h.speed * dtf;
+        if (h.age > h.life ||
+            (h.x1 != null && (h.x < h.x1 - 8 || h.x > h.x2 + 8))) {
+          this.bossHazards.splice(i, 1);
+          continue;
+        }
+        rect = { x: h.x - 6, y: ground - 12, width: 12, height: 12 };
+        if (!h.hit && aabb(rect, p.getBounds())) {
+          h.hit = true;
+          if (!p.isInvincibleNow(t)) {
+            this.damagePlayer();
+            this.addScreenShake(7, 4);
+          }
+        }
+      }
+    }
+  }
+
+  drawBossHazards(ctx) {
+    if (this.bossHazards.length === 0) return;
+    const ground = GameConfig.GROUND_Y;
+    const t = this.currentTime;
+
+    for (const h of this.bossHazards) {
+      if (h.type === 'geyser') {
+        const warning = h.age < h.warn;
+        const active = h.age >= h.warn && h.age < h.warn + h.activeFor;
+        const blink = 0.5 + 0.5 * Math.sin(t / 70);
+        if (warning) {
+          ctx.fillStyle = `rgba(127, 233, 255, ${0.25 + blink * 0.35})`;
+          ctx.fillRect(Math.round(h.x) - 11, ground - 2, 22, 2);
+          for (let k = -1; k <= 1; k++) {
+            ctx.fillRect(Math.round(h.x) + k * 7, ground - 6 - blink * 3, 2, 3);
+          }
+        } else if (active) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          const grad = ctx.createLinearGradient(0, ground - 66, 0, ground);
+          grad.addColorStop(0, 'rgba(127, 233, 255, 0)');
+          grad.addColorStop(0.45, 'rgba(127, 233, 255, 0.45)');
+          grad.addColorStop(1, 'rgba(240, 255, 255, 0.95)');
+          ctx.fillStyle = grad;
+          ctx.fillRect(Math.round(h.x) - 9, ground - 66, 18, 66);
+          ctx.fillStyle = 'rgba(255,255,255,0.85)';
+          ctx.fillRect(Math.round(h.x) - 3, ground - 52, 6, 52);
+          ctx.restore();
+        }
+      } else if (h.type === 'container') {
+        const fallStart = h.warn;
+        const landAt = fallStart + h.fall;
+        const landed = h.age >= landAt;
+        if (h.age < fallStart) {
+          const blink = 0.5 + 0.5 * Math.sin(t / 60);
+          ctx.fillStyle = `rgba(255, 179, 71, ${0.18 + blink * 0.22})`;
+          ctx.fillRect(Math.round(h.x) - 16, ground - 3, 32, 3);
+          ctx.fillStyle = `rgba(255, 210, 120, ${0.35 + blink * 0.4})`;
+          for (let k = -1; k <= 1; k++) {
+            ctx.fillRect(Math.round(h.x) + k * 9, ground - 8, 5, 2);
+          }
+        } else {
+          const fallK = Math.max(0, Math.min(1, (h.age - fallStart) / h.fall));
+          const y = landed ? ground - 30 : Math.round(ground - 30 - (1 - fallK) * 170);
+          if (!landed) {
+            ctx.strokeStyle = 'rgba(180, 200, 220, 0.45)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(Math.round(h.x), 0);
+            ctx.lineTo(Math.round(h.x), y);
+            ctx.stroke();
+          }
+          // 集装箱：金属块 + 危险条纹
+          ctx.fillStyle = '#1a2430';
+          ctx.fillRect(Math.round(h.x) - 15, y - 1, 30, 31);
+          ctx.fillStyle = '#41546a';
+          ctx.fillRect(Math.round(h.x) - 13, y, 26, 28);
+          ctx.fillStyle = '#ffb347';
+          ctx.fillRect(Math.round(h.x) - 13, y + 9, 26, 3);
+          ctx.fillStyle = '#0e141c';
+          for (let k = 0; k < 3; k++) {
+            ctx.fillRect(Math.round(h.x) - 11 + k * 9, y + 2, 2, 25);
+          }
+          ctx.fillStyle = 'rgba(255, 220, 150, 0.8)';
+          ctx.fillRect(Math.round(h.x) - 13, y, 26, 1);
+        }
+      } else if (h.type === 'laser') {
+        for (const lane of [false, true]) {
+          const y = lane ? ground - 48 : ground - 16;
+          ctx.fillStyle = '#111820';
+          ctx.fillRect(Math.round(h.x1) - 4, y - 6, 5, 12);
+          ctx.fillRect(Math.round(h.x2) - 1, y - 6, 5, 12);
+          ctx.fillStyle = lane ? '#6b3a54' : '#3a2030';
+          ctx.fillRect(Math.round(h.x1) - 3, y - 1, 3, 3);
+          ctx.fillRect(Math.round(h.x2) - 1, y - 1, 3, 3);
+        }
+
+        let active = null;
+        let next = null;
+        for (let k = 0; k < h.pulses.length; k++) {
+          const pl = h.pulses[k];
+          if (h.age >= pl.start && h.age < pl.end) active = pl;
+          else if (pl.start > h.age && (!next || pl.start < next.start)) next = pl;
+        }
+
+        if (active) {
+          const y = active.low ? ground - 16 : ground - 48;
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.fillStyle = 'rgba(255, 60, 110, 0.22)';
+          ctx.fillRect(Math.round(h.x1), y - 4, Math.round(h.x2 - h.x1), 9);
+          ctx.fillStyle = 'rgba(255, 120, 160, 0.85)';
+          ctx.fillRect(Math.round(h.x1), y - 1, Math.round(h.x2 - h.x1), 3);
+          ctx.fillStyle = '#fff2f7';
+          ctx.fillRect(Math.round(h.x1), y, Math.round(h.x2 - h.x1), 1);
+          ctx.restore();
+        } else if (next) {
+          const y = next.low ? ground - 16 : ground - 48;
+          const blink = 0.5 + 0.5 * Math.sin(t / 55);
+          ctx.save();
+          ctx.fillStyle = `rgba(255, 90, 130, ${0.22 + blink * 0.35})`;
+          for (let px = h.x1; px < h.x2; px += 9) {
+            ctx.fillRect(Math.round(px), y, 5, 1);
+          }
+          ctx.fillStyle = `rgba(255, 210, 225, ${0.5 + blink * 0.4})`;
+          ctx.fillRect(Math.round(h.x1), y - 3, Math.round(h.x2 - h.x1), 1);
+          ctx.restore();
+        }
+      } else if (h.type === 'railwave') {
+        const x = Math.round(h.x);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const g = ctx.createLinearGradient(0, ground - 22, 0, ground);
+        g.addColorStop(0, 'rgba(199, 125, 255, 0)');
+        g.addColorStop(1, 'rgba(220, 180, 255, 0.9)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x - 7, ground - 22, 14, 22);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x - 1, ground - 16, 2, 16);
+        ctx.strokeStyle = 'rgba(220, 190, 255, 0.85)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x - 7, ground - 12);
+        ctx.lineTo(x - 2, ground - 17);
+        ctx.lineTo(x + 3, ground - 10);
+        ctx.lineTo(x + 7, ground - 15);
+        ctx.stroke();
+        ctx.restore();
       }
     }
   }
@@ -956,6 +1281,7 @@ export class Game {
     };
     this.cinematic = 'bossDeath';
     this.shockwaves = [];
+    this.bossHazards = [];
     // 不能重建数组：这里可能在 updateBullets 的循环中被调用，
     // 替换 this.bullets 会让循环索引越界，导致整帧抛错卡死。
     for (const b of this.bullets) {
@@ -1222,11 +1548,25 @@ export class Game {
         name: this.level.boss.name,
         title: this.level.boss.title,
         profile: GameConfig.BOSS_PROFILES?.[this.level.id] || null,
+        sheetKey: GameConfig.BOSS_PROFILES?.[this.level.id]?.sheet || 'boss_steam',
       },
     );
     this.boss.awake = true;
     this.boss.controlLocked = true;
     this.enemies.push(this.boss);
+
+    // Boss 门禁检查点：进门前补 1 点生命，避免长血条战斗被残血卡死
+    if (!this.bossDoorHealed) {
+      this.bossDoorHealed = true;
+      if (this.lives < GameConfig.PLAYER.lives) {
+        this.lives++;
+        if (this.onLivesChange) this.onLivesChange(this.lives);
+        this.showPickupToast('Boss 门禁 · 生命 +1', '#39ff88');
+      } else {
+        this.addScore(100);
+        this.showPickupToast('Boss 门禁 · 检查点', '#39ff88');
+      }
+    }
 
     // 场地补给：血量 + 保底步枪，避免只有手枪时打长血条。
     // 强制生成，不受场上掉落物数量上限影响。
@@ -1325,6 +1665,7 @@ export class Game {
 
       // 贴地机关与检查点信标（在掩体和角色之下）
       this.drawHazards(ctx);
+      this.drawBossHazards(ctx);
       this.drawCheckpoints(ctx);
 
       // 掩体
