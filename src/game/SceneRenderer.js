@@ -44,6 +44,7 @@ export class SceneRenderer {
   }
 
   initRain() {
+    this.rain = [];
     for (let i = 0; i < 120; i++) {
       const near = i > 76;
       this.rain.push({
@@ -55,6 +56,21 @@ export class SceneRenderer {
         near,
       });
     }
+
+    // 按透明度分桶：同桶雨丝共用一次 beginPath/stroke，
+    // 120 条雨丝的描边调用降到约 17 次（桶数取决于随机 alpha 分布）。
+    const byAlpha = new Map();
+    for (const d of this.rain) {
+      const key = Math.round(d.alpha * 50) / 50; // 0.02 粒度，肉眼无差
+      d.alpha = key;
+      let bucket = byAlpha.get(key);
+      if (!bucket) {
+        bucket = [];
+        byAlpha.set(key, bucket);
+      }
+      bucket.push(d);
+    }
+    this.rainBuckets = Array.from(byAlpha.entries()).sort((a, b) => a[0] - b[0]);
   }
 
   setLevel(levelId) {
@@ -438,11 +454,17 @@ export class SceneRenderer {
       ? 'rgba(180,255,150,0.42)'
       : 'rgba(180,210,255,0.45)';
     ctx.lineWidth = 1;
-    for (const d of this.rain) {
-      ctx.globalAlpha = d.alpha;
+    const buckets = this.rainBuckets;
+    for (let i = 0; i < buckets.length; i++) {
+      const bucket = buckets[i];
+      const drops = bucket[1];
+      ctx.globalAlpha = bucket[0];
       ctx.beginPath();
-      ctx.moveTo(d.x, d.y);
-      ctx.lineTo(d.x - d.len * 0.18, d.y + d.len);
+      for (let j = 0; j < drops.length; j++) {
+        const d = drops[j];
+        ctx.moveTo(d.x, d.y);
+        ctx.lineTo(d.x - d.len * 0.18, d.y + d.len);
+      }
       ctx.stroke();
     }
     ctx.globalAlpha = 1;

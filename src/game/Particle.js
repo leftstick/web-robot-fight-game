@@ -1,3 +1,31 @@
+// 预渲染光晕贴图：shadowBlur 每帧会让 Skia 对每个粒子做一次模糊，
+// 粒子多时开销显著；改成缓存径向渐变贴图后只是一次 drawImage。
+const GLOW_SIZE = 32;
+const glowCache = new Map();
+
+function getGlowSprite(color) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(color)) return null;
+  const cached = glowCache.get(color);
+  if (cached) return cached;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = GLOW_SIZE;
+  canvas.height = GLOW_SIZE;
+  const g = canvas.getContext('2d');
+  const n = parseInt(color.slice(1), 16);
+  const rgb = `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+  const half = GLOW_SIZE / 2;
+  const grad = g.createRadialGradient(half, half, 0, half, half, half);
+  grad.addColorStop(0, `rgba(${rgb}, 0.55)`);
+  grad.addColorStop(0.45, `rgba(${rgb}, 0.20)`);
+  grad.addColorStop(1, `rgba(${rgb}, 0)`);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, GLOW_SIZE, GLOW_SIZE);
+
+  glowCache.set(color, canvas);
+  return canvas;
+}
+
 export class Particle {
   constructor(x, y, color, speed, size, life) {
     this.x = x;
@@ -33,19 +61,20 @@ export class Particle {
   }
   
   draw(ctx) {
-    ctx.save();
-    
     const alpha = this.life / this.maxLife;
+    const r = this.size * alpha;
     ctx.globalAlpha = alpha;
+
+    const glow = getGlowSprite(this.color);
+    if (glow) {
+      const gs = r * 3 + 6;
+      ctx.drawImage(glow, this.x - gs / 2, this.y - gs / 2, gs, gs);
+    }
+
     ctx.fillStyle = this.color;
-    ctx.shadowColor = this.color;
-    ctx.shadowBlur = 5;
-    
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.size * alpha, 0, Math.PI * 2);
+    ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
     ctx.fill();
-    
-    ctx.restore();
   }
 }
 
@@ -82,9 +111,17 @@ export class ParticleSystem {
   }
   
   draw(ctx) {
-    for (const particle of this.particles) {
-      particle.draw(ctx);
+    const particles = this.particles;
+    if (particles.length === 0) return;
+    // 光晕贴图缩小绘制需要插值，核心圆仍走矢量绘制；
+    // 每帧只切一次平滑状态，避免逐粒子 save/restore。
+    const prevSmoothing = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = true;
+    for (let i = 0; i < particles.length; i++) {
+      particles[i].draw(ctx);
     }
+    ctx.imageSmoothingEnabled = prevSmoothing;
+    ctx.globalAlpha = 1;
   }
   
   clear() {

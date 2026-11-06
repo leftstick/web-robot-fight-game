@@ -29,6 +29,93 @@ function aabb(a, b) {
          a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
+// 浮空平台是静态几何，预渲染到小画布，避免每帧上百次 fillRect。
+// 外边距用于容纳顶部吊索（5px）、下方桁架与投影（9px）。
+const PLATFORM_PAD_X = 2;
+const PLATFORM_PAD_TOP = 6;
+const PLATFORM_PAD_BOTTOM = 10;
+
+function buildPlatformSprite(neon, w, h) {
+  const canvas = document.createElement('canvas');
+  canvas.width = w + PLATFORM_PAD_X * 2;
+  canvas.height = h + PLATFORM_PAD_TOP + PLATFORM_PAD_BOTTOM;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const x = PLATFORM_PAD_X;
+  const y = PLATFORM_PAD_TOP;
+
+  // 平台落在背景上的投影
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.fillRect(x + 5, y + h + 5, w - 10, 3);
+
+  // 主体钢板
+  ctx.fillStyle = '#080a10';
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = '#232a38';
+  ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+  ctx.fillStyle = '#1a202c';
+  ctx.fillRect(x + 1, y + h - 2, w - 2, 1);
+
+  // 顶面高光 / 走道边
+  ctx.fillStyle = '#7b8ca3';
+  ctx.fillRect(x + 1, y, w - 2, 1);
+  ctx.fillStyle = '#465368';
+  ctx.fillRect(x + 1, y + 1, w - 2, 1);
+  ctx.fillStyle = '#0e121b';
+  ctx.fillRect(x + 1, y + 2, w - 2, 1);
+
+  // 防滑纹：交错短横线
+  for (let sx = x + 4; sx < x + w - 4; sx += 7) {
+    ctx.fillStyle = ((sx - x) / 7 | 0) % 2 ? '#344054' : '#2b3446';
+    ctx.fillRect(sx, y + 4 + (((sx - x) / 7 | 0) % 2), 3, 1);
+  }
+
+  // 侧梁 + 铆钉
+  ctx.fillStyle = '#394456';
+  ctx.fillRect(x, y + 2, 2, h - 3);
+  ctx.fillRect(x + w - 2, y + 2, 2, h - 3);
+  ctx.fillStyle = '#6b7c94';
+  for (let sx = x + 8; sx < x + w - 6; sx += 18) {
+    ctx.fillRect(sx, y + 3, 1, 1);
+  }
+
+  // 底部霓虹灯带（关卡配色）
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(x + 3, y + h - 2, w - 6, 2);
+  ctx.globalAlpha = 0.75;
+  ctx.fillStyle = neon;
+  ctx.fillRect(x + 5, y + h - 1, w - 10, 1);
+  ctx.globalAlpha = 0.18;
+  ctx.fillRect(x + 5, y + h, w - 10, 2);
+  ctx.globalAlpha = 1;
+
+  // 下方桁架支撑
+  const bottom = y + h;
+  for (let sx = x + 9; sx < x + w - 8; sx += 26) {
+    ctx.fillStyle = '#080a10';
+    ctx.fillRect(sx, bottom, 3, 8);
+    ctx.fillStyle = '#2d3748';
+    ctx.fillRect(sx + 1, bottom, 1, 7);
+    ctx.fillRect(sx - 2, bottom + 7, 7, 1);
+    // 斜撑
+    ctx.fillStyle = '#1d2432';
+    ctx.fillRect(sx + 3, bottom, 1, 3);
+    ctx.fillRect(sx + 4, bottom + 3, 1, 2);
+    ctx.fillRect(sx + 5, bottom + 5, 1, 2);
+  }
+
+  // 两端吊索
+  ctx.fillStyle = 'rgba(10,14,22,0.85)';
+  ctx.fillRect(x + 2, y - 5, 1, 5);
+  ctx.fillRect(x + w - 3, y - 5, 1, 5);
+  ctx.fillStyle = 'rgba(120,140,165,0.45)';
+  ctx.fillRect(x + 2, y - 4, 1, 1);
+  ctx.fillRect(x + w - 3, y - 4, 1, 1);
+
+  return canvas;
+}
+
 export class Game {
   constructor(canvas) {
     this.canvas = canvas;
@@ -2358,73 +2445,18 @@ export class Game {
       const w = Math.round(p.w);
       const h = Math.max(7, Math.round(p.h));
 
-      // 平台落在背景上的投影
-      ctx.fillStyle = 'rgba(0,0,0,0.28)';
-      ctx.fillRect(x + 5, y + h + 5, w - 10, 3);
-
-      // 主体钢板
-      ctx.fillStyle = '#080a10';
-      ctx.fillRect(x, y, w, h);
-      ctx.fillStyle = '#232a38';
-      ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
-      ctx.fillStyle = '#1a202c';
-      ctx.fillRect(x + 1, y + h - 2, w - 2, 1);
-
-      // 顶面高光 / 走道边
-      ctx.fillStyle = '#7b8ca3';
-      ctx.fillRect(x + 1, y, w - 2, 1);
-      ctx.fillStyle = '#465368';
-      ctx.fillRect(x + 1, y + 1, w - 2, 1);
-      ctx.fillStyle = '#0e121b';
-      ctx.fillRect(x + 1, y + 2, w - 2, 1);
-
-      // 防滑纹：交错短横线
-      for (let sx = x + 4; sx < x + w - 4; sx += 7) {
-        ctx.fillStyle = ((sx - x) / 7 | 0) % 2 ? '#344054' : '#2b3446';
-        ctx.fillRect(sx, y + 4 + (((sx - x) / 7 | 0) % 2), 3, 1);
+      const key = `${neon}|${w}|${h}`;
+      let sprite = p._platformSprite;
+      if (!sprite || sprite.key !== key) {
+        sprite = { key, canvas: buildPlatformSprite(neon, w, h) };
+        p._platformSprite = sprite;
       }
 
-      // 侧梁 + 铆钉
-      ctx.fillStyle = '#394456';
-      ctx.fillRect(x, y + 2, 2, h - 3);
-      ctx.fillRect(x + w - 2, y + 2, 2, h - 3);
-      ctx.fillStyle = '#6b7c94';
-      for (let sx = x + 8; sx < x + w - 6; sx += 18) {
-        ctx.fillRect(sx, y + 3, 1, 1);
-      }
-
-      // 底部霓虹灯带（关卡配色）
-      ctx.fillStyle = 'rgba(0,0,0,0.65)';
-      ctx.fillRect(x + 3, y + h - 2, w - 6, 2);
-      ctx.globalAlpha = 0.75;
-      ctx.fillStyle = neon;
-      ctx.fillRect(x + 5, y + h - 1, w - 10, 1);
-      ctx.globalAlpha = 0.18;
-      ctx.fillRect(x + 5, y + h, w - 10, 2);
-      ctx.globalAlpha = 1;
-
-      // 下方桁架支撑
-      const bottom = y + h;
-      for (let sx = x + 9; sx < x + w - 8; sx += 26) {
-        ctx.fillStyle = '#080a10';
-        ctx.fillRect(sx, bottom, 3, 8);
-        ctx.fillStyle = '#2d3748';
-        ctx.fillRect(sx + 1, bottom, 1, 7);
-        ctx.fillRect(sx - 2, bottom + 7, 7, 1);
-        // 斜撑
-        ctx.fillStyle = '#1d2432';
-        ctx.fillRect(sx + 3, bottom, 1, 3);
-        ctx.fillRect(sx + 4, bottom + 3, 1, 2);
-        ctx.fillRect(sx + 5, bottom + 5, 1, 2);
-      }
-
-      // 两端吊索
-      ctx.fillStyle = 'rgba(10,14,22,0.85)';
-      ctx.fillRect(x + 2, y - 5, 1, 5);
-      ctx.fillRect(x + w - 3, y - 5, 1, 5);
-      ctx.fillStyle = 'rgba(120,140,165,0.45)';
-      ctx.fillRect(x + 2, y - 4, 1, 1);
-      ctx.fillRect(x + w - 3, y - 4, 1, 1);
+      ctx.drawImage(
+        sprite.canvas,
+        x - PLATFORM_PAD_X,
+        y - PLATFORM_PAD_TOP,
+      );
     }
   }
 
