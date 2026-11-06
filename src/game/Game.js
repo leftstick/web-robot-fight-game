@@ -131,6 +131,30 @@ export class Game {
     this._lastRemaining = -1;
   }
 
+  // 移动端宽屏适配：保持逻辑高度 270，按视口比例横向扩展逻辑视宽。
+  // 这样超宽屏（21:9 / 全面屏）可以铺满屏幕，而不是在两侧留出大黑边。
+  setViewportAspect(aspect) {
+    const baseAspect = GameConfig.LOGICAL_WIDTH / GameConfig.LOGICAL_HEIGHT;
+    const ratio = Number(aspect);
+    const target = Math.max(baseAspect, Math.min(Number.isFinite(ratio) ? ratio : baseAspect, 2.35));
+    const logicalW = Math.round(this.logicalH * target);
+    if (logicalW === this.logicalW) return;
+
+    this.logicalW = logicalW;
+    this.offscreen.width = logicalW;
+    this.offscreen.height = this.logicalH;
+    this.lctx.imageSmoothingEnabled = false;
+    this.canvas.width = logicalW * this.scale;
+    this.canvas.height = this.logicalH * this.scale;
+    if (this.sceneRenderer) this.sceneRenderer.w = logicalW;
+
+    // 视野变宽后相机上限跟着收窄；关卡尚未加载时不做限制
+    if (this.level) {
+      const maxCam = Math.max(0, this.level.worldWidth - logicalW);
+      this.cameraX = Math.min(Math.max(this.cameraX, 0), maxCam);
+    }
+  }
+
   async init() {
     this.input.bindTouchControls(document.getElementById('touchControls'));
 

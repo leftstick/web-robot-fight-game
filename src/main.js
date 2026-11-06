@@ -105,6 +105,11 @@ class GameApp {
     // 竖屏门禁：旋转回横屏后自动继续
     this.orientationGate = document.getElementById('orientationGate');
     this.orientationPaused = false;
+    this.gameContainer = document.querySelector('.game-container');
+    this.immerseBtn = document.getElementById('immerseBtn');
+    this.gateRotateBtn = document.getElementById('gateRotateBtn');
+    this.viewportSyncRaf = 0;
+    this.lastPortrait = null;
 
     this._countRaf = 0;
     this._bossDeathName = '';
@@ -129,19 +134,89 @@ class GameApp {
     this.showScreen('start');
     this.game.setCharacter(this.characterId);
     this.game.init().then(() => this.drawCharacterPortraits());
-    this.setupOrientationGate();
-    this.tryLockLandscape();
+    this.setupMobileViewport();
+    this.setupImmersiveEntry();
+  }
+
+  // —— 移动端视口：尺寸/比例同步 + 竖屏门禁 ——
+  setupMobileViewport() {
+    this.syncViewport();
+    const queueSync = () => {
+      if (this.viewportSyncRaf) return;
+      this.viewportSyncRaf = requestAnimationFrame(() => {
+        this.viewportSyncRaf = 0;
+        this.syncViewport();
+      });
+    };
+    const laterSync = () => {
+      setTimeout(queueSync, 120);
+      setTimeout(queueSync, 480);
+    };
+    window.addEventListener('resize', queueSync);
+    window.addEventListener('orientationchange', laterSync);
+    document.addEventListener('fullscreenchange', laterSync);
+    document.addEventListener('webkitfullscreenchange', laterSync);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', queueSync);
+      window.visualViewport.addEventListener('scroll', queueSync);
+    }
+    queueSync();
+  }
+
+  getViewportSize() {
+    const vv = window.visualViewport;
+    const width = Math.max(1, vv ? vv.width : window.innerWidth);
+    const height = Math.max(1, vv ? vv.height : window.innerHeight);
+    return { width, height };
+  }
+
+  // 让画布容器铺满可视区：宽屏时横向扩展逻辑视野，避免两侧大黑边；
+  // 竖屏时交给门禁，容器仍按 16:9 内接，避免 UI 被拉变形。
+  syncViewport() {
+    const { width: vw, height: vh } = this.getViewportSize();
+    const base = GameConfig.LOGICAL_WIDTH / GameConfig.LOGICAL_HEIGHT;
+    const touch = this.game.input.isTouchEnabled();
+    // 仅移动端扩展视野；桌面端保持 16:9，避免旧尺寸上限造成拉伸
+    const aspect = touch ? Math.max(base, Math.min(vw / vh, 2.35)) : base;
+
+    if (this.game && typeof this.game.setViewportAspect === 'function') {
+      this.game.setViewportAspect(aspect);
+    }
+
+    if (this.gameContainer) {
+      // 桌面端保留原来的 1440×810 上限，移动端则完整铺满
+      const maxW = touch ? Infinity : 1440;
+      const maxH = touch ? Infinity : 810;
+      const avail = document.getElementById('app');
+      let availW = vw;
+      let availH = vh;
+      if (avail) {
+        const cs = getComputedStyle(avail);
+        availW = Math.max(1, avail.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0));
+        availH = Math.max(1, avail.clientHeight - parseFloat(cs.paddingTop || 0) - parseFloat(cs.paddingBottom || 0));
+      }
+      const w = Math.min(availW, availH * aspect, maxW);
+      const h = Math.min(availH, availW / aspect, maxH);
+      this.gameContainer.style.maxWidth = touch ? 'none' : '1440px';
+      this.gameContainer.style.maxHeight = touch ? 'none' : '810px';
+      this.gameContainer.style.width = `${Math.round(w)}px`;
+      this.gameContainer.style.height = `${Math.round(h)}px`;
+    }
+
+    this.applyOrientationGate(vw < vh);
   }
 
   // 竖屏时用门禁覆盖并暂停；转回横屏后只在「因竖屏自动暂停」时恢复
-  setupOrientationGate() {
-    const query = window.matchMedia('(orientation: portrait) and (max-width: 900px)');
-    const apply = () => {
-      const portrait = query.matches;
+  applyOrientationGate(portrait) {
+    const touch = this.game.input.isTouchEnabled();
+    const show = portrait && touch;
+    if (show !== this.lastPortrait) {
+      this.lastPortrait = show;
       if (this.orientationGate) {
-        this.orientationGate.setAttribute('aria-hidden', portrait ? 'false' : 'true');
+        this.orientationGate.classList.toggle('visible', show);
+        this.orientationGate.setAttribute('aria-hidden', show ? 'false' : 'true');
       }
-      if (portrait) {
+      if (show) {
         if (this.game.state === GameState.PLAYING) {
           this.orientationPaused = true;
           this.game.pause();
@@ -150,30 +225,78 @@ class GameApp {
         this.orientationPaused = false;
         if (this.game.state === GameState.PAUSED) this.game.resume();
       }
-    };
-    window.addEventListener('resize', apply);
-    window.addEventListener('orientationchange', () => setTimeout(apply, 160));
-    if (query.addEventListener) query.addEventListener('change', apply);
-    apply();
+    }
+    if (this.orientationGate) {
+      this.orientationGate.setAttribute('aria-hidden', show ? 'false' : 'true');
+    }
   }
 
-  // 强制横屏：尝试调用 Screen Orientation API（需用户手势，失败则静默，
-  // 竖屏由 orientation gate 覆盖提示）
-  tryLockLandscape() {
-    const lock = () => {
+  // —— 强制横屏：首次交互时请求全屏并锁定横屏 ——
+  setupImmersiveEntry() {
+    if (this.immerseBtn) {
+      this.immerseBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.requestImmersive();
+      });
+    }
+    if (this.gateRotateBtn) {
+      this.gateRotateBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.requestImmersive();
+      });
+    }
+    // 移动端首次触摸即进入全屏横屏（浏览器要求必须由用户手势触发）
+    const handler = () => {
+      window.removeEventListener('pointerdown', handler);
+      if (this.game.input.isTouchEnabled()) this.requestImmersive();
+    };
+    window.addEventListener('pointerdown', handler, { once: true, passive: true });
+  }
+
+  requestImmersive() {
+    const lockLandscape = () => {
       try {
         const so = screen.orientation;
         if (so && typeof so.lock === 'function') {
-          so.lock('landscape').catch(() => { /* 浏览器不支持/拒绝，忽略 */ });
+          so.lock('landscape').catch(() => { /* 浏览器不支持/拒绝，静默忽略 */ });
         }
       } catch (_) { /* 忽略 */ }
     };
-    // 首次用户交互时尝试锁定（浏览器策略要求）
-    const handler = () => { lock(); window.removeEventListener('pointerdown', handler); };
-    window.addEventListener('pointerdown', handler, { once: true });
+
+    const root = document.documentElement;
+    const request = root.requestFullscreen || root.webkitRequestFullscreen;
+    const alreadyFull = document.fullscreenElement || document.webkitFullscreenElement;
+
+    if (!request || alreadyFull) {
+      lockLandscape();
+      setTimeout(() => this.syncViewport(), 120);
+      return;
+    }
+
+    try {
+      const result = request.call(root, { navigationUI: 'hide' });
+      if (result && typeof result.then === 'function') {
+        result.then(() => {
+          lockLandscape();
+          setTimeout(() => this.syncViewport(), 120);
+        }).catch(() => {
+          lockLandscape();
+          setTimeout(() => this.syncViewport(), 120);
+        });
+      } else {
+        lockLandscape();
+        setTimeout(() => this.syncViewport(), 200);
+      }
+    } catch (_) {
+      lockLandscape();
+      setTimeout(() => this.syncViewport(), 120);
+    }
   }
 
   setupDeviceSpecific() {
+    document.documentElement.classList.toggle('touch-mode', this.game.input.isTouchEnabled());
     this.updateInputHints();
   }
 
@@ -880,13 +1003,15 @@ class GameApp {
   updateLives(lives) {
     this.hud.lives.innerHTML = '';
     const profile = (GameConfig.CHARACTERS || []).find((c) => c.id === this.game.characterId);
-    if (profile && profile.color) {
-      this.hud.lives.style.setProperty('--life-color', profile.color);
-    }
+    const color = (profile && profile.color) || '#ff2e58';
+    this.hud.lives.style.setProperty('--life-color', color);
     const maxLives = this.game.maxLives || GameConfig.PLAYER.lives;
     for (let i = 0; i < maxLives; i++) {
       const life = document.createElement('div');
       life.className = 'life-icon' + (i >= lives ? ' empty' : '');
+      // 内联兜底颜色：部分手机 WebView 对 color-mix()/CSS 变量组合支持不全，
+      // 只依赖样式表会导致生命格“占位但不可见”。
+      if (i < lives) life.style.background = color;
       this.hud.lives.appendChild(life);
     }
   }
