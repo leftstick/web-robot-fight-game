@@ -113,6 +113,30 @@ body::before {
   image-rendering: crisp-edges;
 }
 
+/* 微信/X5 等无法全屏、也无法锁定横屏时的兜底：
+   视口仍是竖屏，但把整个横版画面旋转 90°，用户把手机横过来即可正常游玩。
+   尺寸由 main.js 按「宽高互换后的视口」写入，这里只负责固定定位与旋转。 */
+html.force-landscape,
+html.force-landscape body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html.force-landscape #app {
+  padding: 0;
+  overflow: hidden;
+}
+
+html.force-landscape .game-container {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(90deg);
+  transform-origin: center center;
+  max-width: none;
+  max-height: none;
+}
+
 /* 手机虚拟按键层：默认隐藏，触屏设备（或 ?touch=1）启用 */
 .touch-controls {
   display: none;
@@ -416,6 +440,17 @@ body::before {
   padding: 10px 26px;
   font-size: 13px;
   min-width: 180px;
+}
+
+/* 微信等无法自动横屏时的画面旋转入口：弱化为次级按钮（双类选择器压过 .btn） */
+.og-card .og-btn-fallback {
+  margin-top: 10px;
+  padding: 8px 18px;
+  font-size: 12px;
+  min-width: 180px;
+  color: #8fdcff;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.35);
 }
 
 /* 开始界面右上角：触屏设备重新进入全屏横屏 */

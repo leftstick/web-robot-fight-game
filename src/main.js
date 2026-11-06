@@ -108,8 +108,12 @@ class GameApp {
     this.gameContainer = document.querySelector('.game-container');
     this.immerseBtn = document.getElementById('immerseBtn');
     this.gateRotateBtn = document.getElementById('gateRotateBtn');
+    this.gateFallbackBtn = document.getElementById('gateFallbackBtn');
     this.viewportSyncRaf = 0;
     this.lastPortrait = null;
+    // 微信等内置浏览器无法全屏/锁定横屏时的兜底：把整个游戏画面旋转 90°
+    this.forceLandscape = false;
+    this._rotateFallbackTimer = 0;
 
     this._countRaf = 0;
     this._bossDeathName = '';
@@ -176,8 +180,20 @@ class GameApp {
     const { width: vw, height: vh } = this.getViewportSize();
     const base = GameConfig.LOGICAL_WIDTH / GameConfig.LOGICAL_HEIGHT;
     const touch = this.game.input.isTouchEnabled();
+    const portrait = vw < vh;
+
+    // 手动旋转只在竖屏视口下生效；设备真正转回横屏后自动退出
+    if (this.forceLandscape && !portrait) {
+      this.forceLandscape = false;
+      document.documentElement.classList.remove('force-landscape');
+    }
+    const rotated = this.forceLandscape;
+
+    // 旋转模式下有效视口宽高互换（画面整体转了 90°）
+    const effW = rotated ? vh : vw;
+    const effH = rotated ? vw : vh;
     // 仅移动端扩展视野；桌面端保持 16:9，避免旧尺寸上限造成拉伸
-    const aspect = touch ? Math.max(base, Math.min(vw / vh, 2.35)) : base;
+    const aspect = touch ? Math.max(base, Math.min(effW / effH, 2.35)) : base;
 
     if (this.game && typeof this.game.setViewportAspect === 'function') {
       this.game.setViewportAspect(aspect);
@@ -195,6 +211,11 @@ class GameApp {
         availW = Math.max(1, avail.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0));
         availH = Math.max(1, avail.clientHeight - parseFloat(cs.paddingTop || 0) - parseFloat(cs.paddingBottom || 0));
       }
+      if (rotated) {
+        const tmp = availW;
+        availW = availH;
+        availH = tmp;
+      }
       const w = Math.min(availW, availH * aspect, maxW);
       const h = Math.min(availH, availW / aspect, maxH);
       this.gameContainer.style.maxWidth = touch ? 'none' : '1440px';
@@ -203,13 +224,14 @@ class GameApp {
       this.gameContainer.style.height = `${Math.round(h)}px`;
     }
 
-    this.applyOrientationGate(vw < vh);
+    this.applyOrientationGate(portrait);
   }
 
   // 竖屏时用门禁覆盖并暂停；转回横屏后只在「因竖屏自动暂停」时恢复
   applyOrientationGate(portrait) {
     const touch = this.game.input.isTouchEnabled();
-    const show = portrait && touch;
+    // 已切到画面旋转模式时不再拦截，游戏可以继续
+    const show = portrait && touch && !this.forceLandscape;
     if (show !== this.lastPortrait) {
       this.lastPortrait = show;
       if (this.orientationGate) {
@@ -231,6 +253,31 @@ class GameApp {
     }
   }
 
+  // 微信/X5 等不支持横屏锁定时：把横版画面旋转 90° 铺满竖屏视口。
+  // 物理上手机仍是竖屏，用户把手机横过来即可正常游玩。
+  enterForceLandscape() {
+    if (!this.game.input.isTouchEnabled()) return;
+    const { width, height } = this.getViewportSize();
+    if (width >= height) return;
+    this.forceLandscape = true;
+    document.documentElement.classList.add('force-landscape');
+    this.syncViewport();
+    // 地址栏/安全区尺寸可能延后稳定，补两次同步
+    setTimeout(() => this.syncViewport(), 80);
+    setTimeout(() => this.syncViewport(), 320);
+  }
+
+  // 尝试全屏/横屏锁定后，若视口仍是竖屏则自动切到旋转模式
+  scheduleRotateFallback() {
+    if (!this.game.input.isTouchEnabled()) return;
+    clearTimeout(this._rotateFallbackTimer);
+    this._rotateFallbackTimer = setTimeout(() => {
+      if (this.forceLandscape) return;
+      const { width, height } = this.getViewportSize();
+      if (width < height) this.enterForceLandscape();
+    }, 700);
+  }
+
   // —— 强制横屏：首次交互时请求全屏并锁定横屏 ——
   setupImmersiveEntry() {
     if (this.immerseBtn) {
@@ -245,6 +292,13 @@ class GameApp {
         e.preventDefault();
         e.stopPropagation();
         this.requestImmersive();
+      });
+    }
+    if (this.gateFallbackBtn) {
+      this.gateFallbackBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.enterForceLandscape();
       });
     }
     // 移动端首次触摸即进入全屏横屏（浏览器要求必须由用户手势触发）
@@ -272,6 +326,7 @@ class GameApp {
     if (!request || alreadyFull) {
       lockLandscape();
       setTimeout(() => this.syncViewport(), 120);
+      this.scheduleRotateFallback();
       return;
     }
 
@@ -293,6 +348,9 @@ class GameApp {
       lockLandscape();
       setTimeout(() => this.syncViewport(), 120);
     }
+
+    // 微信等环境全屏/锁定可能静默失败，仍在竖屏时切旋转模式
+    this.scheduleRotateFallback();
   }
 
   setupDeviceSpecific() {
@@ -345,11 +403,16 @@ class GameApp {
 
     const p = this.game.player;
     const playing = this.game.state === GameState.PLAYING && !!p;
-    this.weaponHud.classList.toggle('visible', playing);
+    // 只在可见性变化时写 DOM，避免每帧触发样式失效
+    if (playing !== this._weaponHudVisible) {
+      this._weaponHudVisible = playing;
+      this.weaponHud.classList.toggle('visible', playing);
+    }
     if (!playing) return;
 
     const w = p.getWeapon();
     if (!w) {
+      this._weaponHudVisible = false;
       this.weaponHud.classList.remove('visible');
       return;
     }

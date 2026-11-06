@@ -40,6 +40,11 @@ export class SceneRenderer {
     this.rain = [];
     this.time = 0;
     this.streetCache = { id: 0, width: 0, items: [], vents: [] };
+    // 光池贴图缓存：按 颜色|半径 复用，避免每帧 createRadialGradient
+    this.lightSprites = new Map();
+    // 全屏雾渐变只与纵向坐标有关，创建一次即可
+    this.backFogGradient = null;
+    this.frontFogGradient = null;
     this.initRain();
   }
 
@@ -139,6 +144,29 @@ export class SceneRenderer {
     ctx.restore();
   }
 
+  // 预渲染霓虹光池：径向渐变只在首次创建，之后按 alpha 贴图混合
+  _lightSprite(color, radius) {
+    const r = Math.max(1, Math.round(radius));
+    const key = `${color}|${r}`;
+    let sprite = this.lightSprites.get(key);
+    if (sprite) return sprite;
+
+    const size = r * 2;
+    sprite = document.createElement('canvas');
+    sprite.width = size;
+    sprite.height = size;
+    const g = sprite.getContext('2d');
+    const grad = g.createRadialGradient(r, r, 0, r, r, r);
+    grad.addColorStop(0, hexToRgba(color, 1));
+    grad.addColorStop(0.5, hexToRgba(color, 0.35));
+    grad.addColorStop(1, hexToRgba(color, 0));
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+
+    this.lightSprites.set(key, sprite);
+    return sprite;
+  }
+
   // 霓虹在潮湿空气里的散射：沿背景层平铺的低透明度光池
   drawAmbientLight(ctx, cameraX, lv) {
     const pools = NEON_POOLS[lv] || NEON_POOLS[1];
@@ -159,12 +187,8 @@ export class SceneRenderer {
         // 每块招牌有独立相位的轻微闪烁，避免整屏一起呼吸
         const flick = 0.92 + 0.08 * Math.sin(this.time / (380 + pi * 170) + pi * 2.4);
         const a = p.a * pulse * flick;
-        const g = ctx.createRadialGradient(sx, p.y, 0, sx, p.y, p.r);
-        g.addColorStop(0, hexToRgba(p.color, a));
-        g.addColorStop(0.5, hexToRgba(p.color, a * 0.35));
-        g.addColorStop(1, hexToRgba(p.color, 0));
-        ctx.fillStyle = g;
-        ctx.fillRect(sx - p.r, p.y - p.r, p.r * 2, p.r * 2);
+        ctx.globalAlpha = a;
+        ctx.drawImage(this._lightSprite(p.color, p.r), sx - p.r, p.y - p.r);
       }
     }
     ctx.restore();
@@ -187,15 +211,12 @@ export class SceneRenderer {
       for (const p of pools) {
         const sx = origin + p.x;
         if (sx + p.r < 0 || sx - p.r > this.w) continue;
+        const r = p.r * 0.95;
         ctx.save();
         ctx.translate(sx, 239);
         ctx.scale(1, 0.20);
-        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, p.r * 0.95);
-        g.addColorStop(0, hexToRgba(p.color, p.a * 1.15 * pulse));
-        g.addColorStop(0.5, hexToRgba(p.color, p.a * 0.38 * pulse));
-        g.addColorStop(1, hexToRgba(p.color, 0));
-        ctx.fillStyle = g;
-        ctx.fillRect(-p.r, -p.r, p.r * 2, p.r * 2);
+        ctx.globalAlpha = p.a * 1.15 * pulse;
+        ctx.drawImage(this._lightSprite(p.color, r), -r, -r, r * 2, r * 2);
         ctx.restore();
       }
     }
@@ -408,11 +429,14 @@ export class SceneRenderer {
 
   // 贴地层雾气，压住远景底部，把角色衬出来
   drawBackFog(ctx) {
-    const g = ctx.createLinearGradient(0, 168, 0, 238);
-    g.addColorStop(0, 'rgba(28, 40, 66, 0)');
-    g.addColorStop(0.65, 'rgba(28, 40, 66, 0.12)');
-    g.addColorStop(1, 'rgba(18, 28, 48, 0.40)');
-    ctx.fillStyle = g;
+    if (!this.backFogGradient) {
+      const g = ctx.createLinearGradient(0, 168, 0, 238);
+      g.addColorStop(0, 'rgba(28, 40, 66, 0)');
+      g.addColorStop(0.65, 'rgba(28, 40, 66, 0.12)');
+      g.addColorStop(1, 'rgba(18, 28, 48, 0.40)');
+      this.backFogGradient = g;
+    }
+    ctx.fillStyle = this.backFogGradient;
     ctx.fillRect(0, 168, this.w, 70);
   }
 
@@ -440,11 +464,14 @@ export class SceneRenderer {
   }
 
   drawFrontFog(ctx) {
-    const g = ctx.createLinearGradient(0, 218, 0, this.h);
-    g.addColorStop(0, 'rgba(10, 18, 30, 0)');
-    g.addColorStop(0.55, 'rgba(10, 18, 30, 0.10)');
-    g.addColorStop(1, 'rgba(10, 18, 30, 0.26)');
-    ctx.fillStyle = g;
+    if (!this.frontFogGradient) {
+      const g = ctx.createLinearGradient(0, 218, 0, this.h);
+      g.addColorStop(0, 'rgba(10, 18, 30, 0)');
+      g.addColorStop(0.55, 'rgba(10, 18, 30, 0.10)');
+      g.addColorStop(1, 'rgba(10, 18, 30, 0.26)');
+      this.frontFogGradient = g;
+    }
+    ctx.fillStyle = this.frontFogGradient;
     ctx.fillRect(0, 218, this.w, this.h - 218);
   }
 

@@ -84,7 +84,11 @@ export class ParticleSystem {
   }
   
   createExplosion(x, y, color, count = 15) {
-    for (let i = 0; i < count; i++) {
+    // 低端机保护：粒子总量封顶，Boss 连锁爆炸时不会瞬间堆出数百个光晕
+    const room = 240 - this.particles.length;
+    if (room <= 0) return;
+    const total = Math.min(count, room);
+    for (let i = 0; i < total; i++) {
       const size = 2 + Math.random() * 4;
       const speed = 2 + Math.random() * 4;
       const life = 30 + Math.random() * 30;

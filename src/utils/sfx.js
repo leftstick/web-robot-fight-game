@@ -6,6 +6,9 @@ export class Sfx {
     this.ctx = null;
     this.master = null;
     this.enabled = true;
+    // 噪声缓冲按时长缓存：连发武器每发都重新生成会分配 Buffer 并循环采样，
+    // 在低端机上直接表现为卡顿/音画不同步。
+    this._noiseBuffers = new Map();
   }
 
   _ensure() {
@@ -58,11 +61,16 @@ export class Sfx {
   _noise({ dur = 0.25, vol = 0.4, cutoff = 1200 }) {
     const ctx = this._ensure();
     if (!ctx) return;
-    const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) {
-      data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const key = dur;
+    let buf = this._noiseBuffers.get(key);
+    if (!buf) {
+      const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+      buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) {
+        data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      }
+      this._noiseBuffers.set(key, buf);
     }
     const src = ctx.createBufferSource();
     src.buffer = buf;

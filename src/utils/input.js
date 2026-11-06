@@ -43,6 +43,7 @@ export class InputManager {
     this.pad = null;
     this.padConnected = false;
     this._padWasConnected = false;
+    this._padPollTick = 0;    // 未连接手柄时降低 getGamepads() 轮询频率
     this.onPadChange = null;   // (connected, id) => void，供 UI 显示连接提示/按键图例
 
     // 触屏虚拟按键
@@ -227,11 +228,27 @@ export class InputManager {
     if (!zone || !base) return;
     const zr = zone.getBoundingClientRect();
     const br = base.getBoundingClientRect();
-    const halfW = (br.width || 132) / 2;
-    const halfH = (br.height || 132) / 2;
+    // 底座是圆形，旋转后 rect 宽高不变；用 offsetWidth 更稳
+    const halfW = (base.offsetWidth || br.width || 132) / 2;
+    const halfH = (base.offsetHeight || br.height || 132) / 2;
     const margin = 6;
-    const x = Math.max(halfW + margin, Math.min(zr.width - halfW - margin, clientX - zr.left));
-    const y = Math.max(halfH + margin, Math.min(zr.height - halfH - margin, clientY - zr.top));
+    // 本地布局尺寸：旋转后 getBoundingClientRect 的宽高会互换，不能直接用
+    const zw = zone.offsetWidth || zr.width;
+    const zh = zone.offsetHeight || zr.height;
+
+    let lx;
+    let ly;
+    if (document.documentElement.classList.contains('force-landscape')) {
+      // 容器 rotate(90deg)：屏幕 +X 对应本地 -Y，屏幕 +Y 对应本地 +X
+      lx = clientY - zr.top;
+      ly = zr.width - (clientX - zr.left);
+    } else {
+      lx = clientX - zr.left;
+      ly = clientY - zr.top;
+    }
+
+    const x = Math.max(halfW + margin, Math.min(zw - halfW - margin, lx));
+    const y = Math.max(halfH + margin, Math.min(zh - halfH - margin, ly));
     base.style.left = `${x}px`;
     base.style.top = `${y}px`;
   }
@@ -350,7 +367,10 @@ export class InputManager {
     const stickDown = sv.y > STICK_DEADZONE_Y;
 
     // —— 手柄：每帧轮询 navigator.getGamepads() ——
-    this.pad = this.findPad();
+    // 未连接手柄时每 15 帧探测一次即可，避免移动端每帧调用该 API 的开销；
+    // 一旦连接（事件或探测命中）就恢复逐帧轮询，保证输入延迟。
+    this._padPollTick = (this._padPollTick + 1) % 15;
+    this.pad = (this.padConnected || this._padPollTick === 0) ? this.findPad() : null;
     const padNow = !!this.pad;
     if (padNow !== this._padWasConnected) {
       this._padWasConnected = padNow;

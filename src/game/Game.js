@@ -254,6 +254,8 @@ export class Game {
 
     // CRT 贴图
     this.crtCanvas = getUi('crt');
+    // 暗角 + CRT 在加载阶段预合成，避免进入战斗时首次构建卡顿
+    this.buildPostOverlay();
 
     // 加载关卡
     this.loadPromise = loadLevels();
@@ -2314,19 +2316,46 @@ export class Game {
     }
 
     if (this.vignetteCanvas) {
-      ctx.drawImage(this.vignetteCanvas, 0, 0);
+      // 暗角 + CRT 已预合成为一张贴图，每帧只做一次整屏叠加
+      if (this.crtCanvas) {
+        if (!this.postOverlay ||
+            this._postOverlayW !== this.logicalW ||
+            this._postOverlayH !== this.logicalH) {
+          this.buildPostOverlay();
+        }
+        if (this.postOverlay) ctx.drawImage(this.postOverlay, 0, 0);
+      } else {
+        ctx.drawImage(this.vignetteCanvas, 0, 0);
+      }
+    }
+  }
+
+  // 预合成暗角 + CRT 扫描线：省掉每帧 createPattern 和一次整屏混合
+  buildPostOverlay() {
+    const w = this.logicalW;
+    const h = this.logicalH;
+    if (!this.vignetteCanvas ||
+        this.vignetteCanvas.width !== w ||
+        this.vignetteCanvas.height !== h) {
+      this.vignetteCanvas = this.createVignette();
     }
 
-    // CRT 扫描线：低调一点，避免糊掉 1px 像素细节
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const g = canvas.getContext('2d');
+    g.drawImage(this.vignetteCanvas, 0, 0);
     if (this.crtCanvas) {
-      ctx.globalAlpha = 0.055;
-      const pattern = ctx.createPattern(this.crtCanvas, 'repeat');
+      const pattern = g.createPattern(this.crtCanvas, 'repeat');
       if (pattern) {
-        ctx.fillStyle = pattern;
-        ctx.fillRect(0, 0, this.logicalW, this.logicalH);
+        g.globalAlpha = 0.055;
+        g.fillStyle = pattern;
+        g.fillRect(0, 0, w, h);
       }
-      ctx.globalAlpha = 1;
     }
+    this.postOverlay = canvas;
+    this._postOverlayW = w;
+    this._postOverlayH = h;
   }
 
   createVignette() {
@@ -2398,7 +2427,7 @@ export class Game {
     ctx.imageSmoothingEnabled = false;
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
-    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    // 离屏画布每帧都从黑色底开始绘制，整块不透明，直接覆盖即可，无需先清屏
     ctx.drawImage(this.offscreen, 0, 0, this.logicalW * this.scale, this.logicalH * this.scale);
   }
 

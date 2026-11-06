@@ -39,13 +39,14 @@
         <div class="tc-btn tc-melee"   data-action="melee"   style="right:var(--act-r6);bottom:var(--act-b6);">劈砍</div>
       </div>
 
-      <!-- 竖屏提示：不再旋转整个游戏，改为提示用户横屏 -->
+      <!-- 竖屏提示：可自动转横屏；微信等不支持时改用旋转画面兜底 -->
       <div id="orientationGate" class="orientation-gate" aria-hidden="true">
         <div class="og-card">
           <div class="og-icon">⟳</div>
           <p class="og-title">请旋转至横屏</p>
-          <p class="og-sub">横版射击需要更宽的视野<br>旋转设备后自动继续</p>
+          <p class="og-sub">横版射击需要更宽的视野<br>微信等内置浏览器无法自动旋转？<br>点击下方按钮横向显示</p>
           <button class="btn btn-primary og-btn" id="gateRotateBtn" type="button">进入横屏全屏</button>
+          <button class="btn og-btn og-btn-fallback" id="gateFallbackBtn" type="button">无法横屏？旋转画面继续</button>
         </div>
       </div>
 
