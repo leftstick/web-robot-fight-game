@@ -29,6 +29,11 @@ function aabb(a, b) {
          a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
+// 跳跃输入缓冲（毫秒）。
+// 命中停顿期间 input 仍在轮询、但 updatePlaying 被跳过，单帧跳跃脉冲会直接丢掉；
+// 再加上落地前抢跳，就会出现「连按好几次才跳」。缓冲让这次按下等一小会儿再执行。
+const JUMP_BUFFER_MS = 130;
+
 // 浮空平台是静态几何，预渲染到小画布，避免每帧上百次 fillRect。
 // 外边距用于容纳顶部吊索（5px）、下方桁架与投影（9px）。
 const PLATFORM_PAD_X = 2;
@@ -193,6 +198,7 @@ export class Game {
     this.screenShake = 0;
     this.screenShakeIntensity = 0;
     this.hitStop = 0;
+    this.jumpBuffer = 0;
     this.damageFlash = 0;
     this.whiteFlash = 0;
 
@@ -328,6 +334,7 @@ export class Game {
     this.effectSystem.clear();
     this.screenShake = 0;
     this.hitStop = 0;
+    this.jumpBuffer = 0;
     this.damageFlash = 0;
     this.whiteFlash = 0;
     this.cameraX = clamp(this.level.playerSpawn.x - this.logicalW * 0.4, 0, this.level.worldWidth - this.logicalW);
@@ -407,6 +414,11 @@ export class Game {
     const input = this.input.poll();
     if (this.onFrame) this.onFrame(input);
 
+    // 跳跃缓冲：蹲+跳（穿板）仍按当帧处理；普通跳跃进入缓冲，
+    // 停顿期间不衰减，保证长 hitStop 结束后这次按下仍然生效。
+    if (input.jump && !input.crouch) this.jumpBuffer = JUMP_BUFFER_MS;
+    else if (!frozen && this.jumpBuffer > 0) this.jumpBuffer = Math.max(0, this.jumpBuffer - this.deltaTime);
+
     if (this.state === GameState.PLAYING && !frozen) {
       this.updatePlaying(dtf, input);
     }
@@ -450,10 +462,11 @@ export class Game {
     // 只记录意图；是否真的站起由头顶净空决定
     p.wantsCrouch = input.crouch;
 
-    // 下 + 跳：从单向平台落下；否则普通跳跃
+    // 下 + 跳：从单向平台落下；否则消费缓冲里的跳跃请求（落地前一瞬按下也能起跳）
     if (input.jump && input.crouch) {
       if (p.tryDropThrough(this.currentTime)) this.sfx.jump();
-    } else if (input.jump && p.jump()) {
+    } else if (this.jumpBuffer > 0 && p.jump()) {
+      this.jumpBuffer = 0;
       this.sfx.jump();
     }
 

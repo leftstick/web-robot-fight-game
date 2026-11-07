@@ -394,7 +394,7 @@ export class InputManager {
 
       padLeft = sx < -DEADZONE || btn(14);                    // 左摇杆左 / D-pad 左
       padRight = sx > DEADZONE || btn(15);                    // 左摇杆右 / D-pad 右
-      padCrouch = sy > DEADZONE || btn(13) || btn(1);           // 摇杆下 / D-pad 下 / B
+      padCrouch = sy > DEADZONE || btn(13) || btn(10);          // 摇杆下 / D-pad 下 / L3
       padJump = btn(0);                                        // A
       padShoot = btn(2) || rt > TRIGGER_THRESHOLD;             // X / RT
       padSwitch = btn(3) || btn(5);                            // Y / RB
@@ -402,7 +402,7 @@ export class InputManager {
       padGrenade = btn(4);                                     // LB 手雷
       padMelee = btn(11);                                      // R3 近战劈砍
       padPause = btn(9);                                       // Start 暂停
-      padDash = btn(10);                                        // L3 冲刺
+      padDash = btn(1);                                         // B 冲刺
 
       // 菜单导航：D-pad(12/13/14/15) 或左摇杆（>0.5 视为方向），A(0) 确认
       const navDirX = sx > 0.5 ? 1 : (sx < -0.5 ? -1 : 0);

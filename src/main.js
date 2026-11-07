@@ -5,7 +5,7 @@ import { getSprites } from './game/SpriteSheet.js';
 // 按键提示文案：按当前设备切换，手柄连接时优先显示手柄按键
 const INPUT_HINTS = {
   keyboard: '键盘：← → / A D 移动 · ↑ / W / K 跳 · ↓ / S 蹲 · 空格 / J 射击 · C 冲刺 · Q / L 切枪 · G 手雷 · X 劈砍 · 蹲+跳 下板',
-  pad: '手柄：左摇杆 / 十字键 移动 · A 跳 · X / RT 射击 · B 蹲 · Y / RB 切枪 · LT 瞄准 · LB 手雷 · R3 劈砍 · L3 冲刺 · Start 暂停',
+  pad: '手柄：左摇杆 / 十字键 移动 · A 跳 · B 冲刺 · X / RT 射击 · Y / RB 切枪 · LT 瞄准 · LB 手雷 · R3 劈砍 · L3 蹲 · Start 暂停',
   touch: '触屏：左半屏浮动摇杆 移动 / 下推蹲 · 右侧 射击 / 跳跃 / 冲刺 / 手雷 / 切枪 / 劈砍 · 摇杆下推+跳跃 下板',
   keyboardMenu: '菜单：方向键 选择 · 空格 / 回车 确认 · Backspace 返回',
   padMenu: '菜单：D-pad / 左摇杆 选择 · A 确认 · B 返回',
@@ -16,8 +16,8 @@ const INPUT_HINTS = {
     '<b>X</b> 劈砍 <span class="sep">·</span> <b>G</b> 手雷 <span class="sep">·</span> <b>Esc</b> 暂停',
   ],
   padLines: [
-    '<b>左摇杆</b> 移动 <span class="sep">·</span> <b>A</b> 跳 <span class="sep">·</span> <b>B</b> 蹲',
-    '<b>X</b>/<b>RT</b> 射击 <span class="sep">·</span> <b>L3</b> 冲刺 <span class="sep">·</span> <b>Y</b>/<b>RB</b> 切枪',
+    '<b>左摇杆</b> 移动 <span class="sep">·</span> <b>A</b> 跳 <span class="sep">·</span> <b>B</b> 冲刺',
+    '<b>X</b>/<b>RT</b> 射击 <span class="sep">·</span> <b>L3</b> 蹲 <span class="sep">·</span> <b>Y</b>/<b>RB</b> 切枪',
     '<b>LB</b> 手雷 <span class="sep">·</span> <b>R3</b> 劈砍 <span class="sep">·</span> <b>Start</b> 暂停',
   ],
 };
